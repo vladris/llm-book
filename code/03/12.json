@@ -1,0 +1,5 @@
+{
+    "temperature": 0.2,
+    "max_tokens": 100,
+    "prompt": "You are a lawyer. {action}: {document}"
+}

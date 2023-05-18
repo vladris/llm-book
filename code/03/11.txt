@@ -1,0 +1,7 @@
+Q: In a bouquet of 24 flowers, half are roses. A third of the roses are red. How many red roses are in the bouquet?
+
+A: The bouquet has 24 flowers, so half of them being roses means there are 12 roses. A third of the roses are red out of 12 rose, so there are 4 red roses in the bouquet.
+
+Q: In a bouquet of 12 flowers, half are roses. Half of the roses are red. How may red roses are in the bouquet?
+
+A:

@@ -1,0 +1,8 @@
+{
+    "temperature": 1,
+    "max_tokens": 100,
+    "messages": [
+        { "role": "system", "content": "You are a talented writer." },
+        { "role": "user", "content": "{action}: {document}" }
+    ]
+}

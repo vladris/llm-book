@@ -1,0 +1,3 @@
+Step 1: Half of 12 flowers is 6. 
+Step 2: Half of 6 roses is 3.
+Answer: There are 3 red roses in the bouquet.

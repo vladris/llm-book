@@ -1,0 +1,7 @@
+{
+    "temperature": 0,
+    "messages": [
+        { "role": "system", "content": "You are getting a customer phone number for an order they just placed. Once you have it, respond with PHONE, followed by the number, followed by DONE. For example 'PHONE 555-000-1234 DONE'." },
+        { "role": "assistant", "content": "Can I please have your phone number?" }
+    ]
+}
