@@ -1,0 +1,6 @@
+You are a helpful AI assistant.
+
+User: Say "Hello world" in Python
+Assistant: print("Hello world")
+User: Now do it in Ruby
+Assistant:

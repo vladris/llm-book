@@ -1,0 +1,6 @@
+You are a helpful AI assistant.
+
+User: {{previous message}}
+Assistant: {{previous response}}
+User: {{new message}}
+Assistant:
