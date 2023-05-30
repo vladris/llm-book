@@ -1,0 +1,195 @@
+@import url(http://fonts.googleapis.com/css?family=PT+Sans:400,700,400italic,700italic);
+@import url(http://fonts.googleapis.com/css?family=Source+Code+Pro);
+
+.highlight {
+  overflow: scroll;
+}
+
+.MathJax_Display {
+  overflow-x: scroll;
+}
+
+header {
+  color: #93a4ad;
+  text-align: right;
+}
+
+#prev {
+  text-align: center;
+}
+
+#next {
+  text-align: center;
+}
+
+@media only screen and (min-width: 800px) {
+  nav {
+    display: flex;
+    flex-direction: row;
+  }
+
+  #prev {
+    padding-right: 5px;
+    text-align: left;
+    width: 50%;
+  }
+
+  #next {
+    padding-left: 5px;
+    text-align: right;
+    width: 50%;
+  }
+}
+
+footer {
+  color: #93a4ad;
+  margin-top: 20px;
+  text-align: center;
+}
+
+a {
+  font-weight: bold;
+  text-decoration: none;
+  color: #dd0000;
+}
+
+blockquote {
+  border-left: 10px solid #dd0000;
+  margin-left: 0;
+  margin-right: 30px;
+  padding-left: 20px;
+}
+
+body {
+  background-color: #f8fafb;
+  color: #222;
+  font-family: 'PT Sans', Arial, Helvetica, sans-serif;
+  font-size: 1em;
+  line-height: 1.4em;
+  margin: auto;
+  max-width: 800px;
+  padding: 20px;
+  text-align: justify;
+}
+
+h1 {
+  line-height: 1.2em;
+  text-align: left;
+}
+
+@media only screen and (min-width: 800px) {
+  body {
+      font-size: 1.1em;
+  }
+}
+
+code {
+  background-color: #e6edf2;
+  border: 1px solid #d8dadb;
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+
+pre {
+  color: #c9d1d9;
+  padding: 0 20px;
+}
+
+code, pre {
+  font-family: 'Source Code Pro', Lucida Console, Courier, monospace;
+  font-size: .8em;
+}
+
+ul {
+  list-style: square;
+  padding-left: 20px;
+}
+
+ol {
+  padding-left: 20px;
+}
+
+img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: scroll;
+  max-width: 100%;
+}
+
+hr {
+  border-color: #93a4ad;
+  border-style: solid;
+  border-width: 1px 0 0 0;
+}
+
+table {
+  border: 1px #222 solid;
+  border-collapse: collapse;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+th {
+  padding: 5px 10px;
+  border: 1px #93a4ad solid;
+  background-color: #222;
+  color: #f8fafb;
+}
+
+td {
+  padding: 5px 10px;
+  border: 1px #222 solid;
+}
+
+tr:nth-child(even) {
+  background-color: #93a4ad;
+}
+
+tr:nth-child(odd) {
+  background-color: #f8fafb;
+}
+
+/* Math - override pygments.css */
+.mrow .mi, .mrow .mo {
+  color: #222;
+}
+
+#index .year {
+  font-size: 2em;
+  font-weight: bold;
+  margin-bottom: 2em;
+  margin-top: 2em;
+}
+
+#index .date {
+  font-size: 1.5em;
+  margin-bottom: .5em;
+}
+
+#index .post {
+  font-size: 1.5em;
+  font-weight: bold;
+  text-align: left;
+  margin-bottom: 2em;
+}
+
+@media only screen and (min-width: 800px) {
+  #index {
+    display: grid;
+    grid-template-columns: 40% 60%;
+  }
+
+  #index .year {
+    grid-column: 1 / span 2;
+  }
+
+  #index .date {
+    margin-bottom: 2em;
+    text-align: center;
+  }
+
+  #index .post {
+    grid-column: 2;
+  }
+}
