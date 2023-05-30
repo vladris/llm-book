@@ -5,13 +5,15 @@
   overflow: scroll;
 }
 
-.MathJax_Display {
-  overflow-x: scroll;
-}
-
 header {
+  background-color: #f8fafb;
   color: #93a4ad;
   text-align: right;
+  font-size: 3em;
+  position: sticky;
+  top: 0px;
+  padding-top: 10px;
+  height: 1em;
 }
 
 #prev {
@@ -69,6 +71,7 @@ body {
   margin: auto;
   max-width: 800px;
   padding: 20px;
+  padding-top: 0px;
   text-align: justify;
 }
 
@@ -148,48 +151,4 @@ tr:nth-child(even) {
 
 tr:nth-child(odd) {
   background-color: #f8fafb;
-}
-
-/* Math - override pygments.css */
-.mrow .mi, .mrow .mo {
-  color: #222;
-}
-
-#index .year {
-  font-size: 2em;
-  font-weight: bold;
-  margin-bottom: 2em;
-  margin-top: 2em;
-}
-
-#index .date {
-  font-size: 1.5em;
-  margin-bottom: .5em;
-}
-
-#index .post {
-  font-size: 1.5em;
-  font-weight: bold;
-  text-align: left;
-  margin-bottom: 2em;
-}
-
-@media only screen and (min-width: 800px) {
-  #index {
-    display: grid;
-    grid-template-columns: 40% 60%;
-  }
-
-  #index .year {
-    grid-column: 1 / span 2;
-  }
-
-  #index .date {
-    margin-bottom: 2em;
-    text-align: center;
-  }
-
-  #index .post {
-    grid-column: 2;
-  }
 }
