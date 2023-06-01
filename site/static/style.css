@@ -8,12 +8,73 @@
 header {
   background-color: #f8fafb;
   color: #93a4ad;
-  text-align: right;
-  font-size: 3em;
+  display: flex;
+  flex-wrap: wrap;
+  height: 2em;
   position: sticky;
-  top: 0px;
   padding-top: 10px;
-  height: 1em;
+  top: 0px;
+}
+
+.title {
+  flex-grow: 1;
+  white-space: nowrap;
+}
+
+#toggle {
+  display: none;
+}
+
+.hamburger {
+  cursor: pointer;
+}
+
+.hamburger > span {
+  background-color: #dd0000;
+  height: 4px;
+  display: block;
+  width: 30px;
+  transition-duration: .5s;
+}
+
+.hamburger > span + span {
+  margin-top: 6px;
+}
+
+.menu {
+  background-color: #f8fafb;
+  color: #222;
+  margin-top: 0;
+  padding-top: 2em;
+  order: 1;
+  height: 100vh;
+  width: 100%;
+  transform: translate(150%);
+  transition-duration: .5s;
+}
+
+.menu li {
+  display: block;
+  padding: 10px;
+}
+
+input:checked + .hamburger > span {
+  rotate: 45deg;
+  transform-origin: left;
+}
+
+input:checked + .hamburger > span + span {
+  opacity: 0;
+}
+
+input:checked + .hamburger > span + span + span {
+  opacity: 100%;
+  rotate: -45deg;
+  transform-origin: left;
+}
+
+input:checked ~ .menu {
+  transform: translate(0);
 }
 
 #prev {

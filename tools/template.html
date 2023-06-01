@@ -10,7 +10,18 @@
 <!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
 </head>
 <body>
-<header><span>️<a href="#">☰</a></span></header>
+<header>
+  <div class="title"><span>{{ prefix }}: {{ title & }}</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li>One</li>
+    <li>Two</li>
+    <li>Three</li>
+    <li>Four</li>
+    <li>Five</li>
+  </ul>
+</header>
 <article>
 {{ content }}
 </article>
