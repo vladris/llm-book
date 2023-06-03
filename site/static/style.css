@@ -44,26 +44,20 @@ header {
 .menu {
   background-color: #f8fafb;
   color: #222;
-  opacity: 0;
+  display: none;
   font-size: 1.4em;
   font-weight: bold;
   line-height: 1.6em;
   list-style: none;
   margin-top: 0;
-  padding-left: 0;
+  padding: 40px 0;
   order: 1;
-  height: 100vh;
   width: 100%;
-  transition-duration: .5s;
 }
 
 .menu li {
-  padding: 2px;
-  text-align: left;
-}
-
-.menu li.disabled {
-  color: #93a4ad;
+  padding: 10px;
+  text-align: center;
 }
 
 input:checked + .hamburger > span {
@@ -82,7 +76,7 @@ input:checked + .hamburger > span + span + span {
 }
 
 input:checked ~ .menu {
-  opacity: 100%;
+  display: block;
 }
 
 #prev {

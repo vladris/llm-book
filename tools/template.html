@@ -11,32 +11,20 @@
 </head>
 <body>
 <header>
-  <div class="title"><span>{{ prefix }}: {{ title & }}</span></div>
+  <div class="title"><span>{{ prefix }}{{ title & }}</span></div>
   <input type="checkbox" id="toggle">
   <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
   <ul class="menu">
-    <li><a href="#">📣 Feedback</a></li>
-    <li><a href="#">✉️ Subscribe for updates</a></li>
-    <hr />
-    <li><a href="#">Front Cover</a></li>
-    <li class="disabled">Foreword</li>
-    <li class="disabled">Table of Contents</li>
-    <li><a href="#">Chapter 1: A New Paradigm</a></li>
-    <li><a href="#">Chapter 2: Large Language Models</a></li>
-    <li><a href="#">Chapter 3: Prompt Engineering</a></li>
-    <li class="disabled">Chapter 4: Learning and Tuning</li>
-    <li class="disabled">Chapter 5: Memory and Embeddings</li>
-    <li class="disabled">Chapter 6: Interacting With External Systems</li>
-    <li class="disabled">Chapter 7: Planning</li>
-    <li class="disabled">Chapter 8: Safety and Security</li>
-    <li class="disabled">Chapter 9: Frameworks</li>
-    <li class="disabled">Chapter 10: Final Thoughts</li>
-    <li class="disabled">Appendix A: Utilities</li>
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
   </ul>
 </header>
 <article>
 {{ content }}
 </article>
-<footer><span>By Vlad Rișcuția</span></footer>
+<hr />
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
 </body>
 </html>
