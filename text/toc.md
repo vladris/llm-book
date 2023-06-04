@@ -13,5 +13,3 @@
 * Chapter 9: Frameworks
 * Chapter 10: Final Thoughts
 * Appendix A: LLM Utilities
-
-Version `0.1`. Previous: [Front Cover](./index.html). Next: [Chapter 1: A New Paradigm](./a-new-paradigm.html).

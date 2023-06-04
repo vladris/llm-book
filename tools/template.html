@@ -24,7 +24,16 @@
 <article>
 {{ content }}
 </article>
-<hr />
+<nav>
+<p>
+{{ if prev_link }}
+<span>Previous: <a href="{{ prev_link }}">{{ prev_title & }}</a>. 
+{{ endif }}
+{{ if next_link }}
+<span>Next: <a href="{{ next_link }}">{{ next_title & }}</a>.
+{{ endif }}
+</p>
+</nav>
 <footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
 </body>
 </html>
