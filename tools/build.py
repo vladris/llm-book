@@ -38,7 +38,7 @@ chapter_prefixes = {
 }
 
 # Chapter order
-chapters = ['index', 'toc', 'preface' '01']
+chapters = ['index', 'toc', 'preface', '01']
 
 # Get chapter outpath
 def get_chapter_outpath(index):

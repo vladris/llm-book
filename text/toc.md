@@ -2,6 +2,9 @@
 
 * [Front Cover](./index.html)
 * [Table of Contents](./table-of-contents.html)
+* [Preface](./preface.html)
+  * [Acknowledgements](./preface.html#Acknowledgements)
+  * [About the author](./preface.html#About the author)
 * [Chapter 1: A New Paradigm](./a-new-paradigm.html)
 * Chapter 2: Large Language Models
 * Chapter 3: Prompt Engineering
