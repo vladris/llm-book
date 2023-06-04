@@ -19,7 +19,7 @@ jobs:
         run: python -m pip install --upgrade pip baku
       - name: Build blog
         run: |
-          baku --build
+          python tools/build.py
           TEMP=`mktemp -d`
           cp -r site/* $TEMP
           echo "temp=$TEMP" >> $GITHUB_ENV
