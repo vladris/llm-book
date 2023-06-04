@@ -1,2 +1,0 @@
-{"as": "lawyer", "action": "draft", "document": "an open-source license document."}
-{"as": "writer", "action": "write", "document": "a funny skit."}

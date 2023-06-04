@@ -1,8 +1,0 @@
-{
-    "temperature": 0.2,
-    "max_tokens": 100,
-    "messages": [
-        { "role": "system", "content": "You are a lawyer." },
-        { "role": "user", "content": "{action}: {document}" }
-    ]
-}
