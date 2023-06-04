@@ -25,20 +25,20 @@ chapter_titles = {
     '05': 'Memory and Embeddings',
 }
 
-# Chapter prefix mappings
-chapter_prefixes = {
-    'index': '',
-    'toc': '',
-    'preface': '',
-    '01': 'Chapter 1: ',
-    '02': 'Chapter 2: ',
-    '03': 'Chapter 3: ',
-    '04': 'Chapter 4: ',
-    '05': 'Chapter 5: ',
+# Chapter heading mappings
+chapter_headings = {
+    'index': '%s ~ Large Language Models at Work',
+    'toc': '%s ~ Large Language Models at Work',
+    'preface': '%s ~ Large Language Models at Work',
+    '01': 'Chapter 1: %s',
+    '02': 'Chapter 2: %s',
+    '03': 'Chapter 3: %s',
+    '04': 'Chapter 4: %s',
+    '05': 'Chapter 5: %s',
 }
 
 # Chapter order
-chapters = ['index', 'toc', 'preface', '01']
+chapters = ['index', 'toc', 'preface', '01', '02', '03']
 
 # Get chapter outpath
 def get_chapter_outpath(index):
@@ -56,7 +56,9 @@ for file in os.listdir('text'):
 
     filepath = os.path.join('text', file)
     index = file.split('.')[0]
-    title, prefix, outpath = chapter_titles[index], chapter_prefixes[index], os.path.join('site', get_chapter_outpath(index))
+    title = chapter_titles[index]
+    heading = chapter_headings[index].format(title)
+    outpath = os.path.join('site', get_chapter_outpath(index))
 
     # Link to previous and next chapters
     i = chapters.index(index)
@@ -74,8 +76,8 @@ for file in os.listdir('text'):
     with open(outpath, 'w+') as f:
         f.write(render(VerySimpleTemplate('./tools/template.html'), {
             'content': md(text),
-            'prefix': prefix,
             'title': title,
+            'heading': heading,
             'prev_title': prev_title,
             'prev_link': prev_link,
             'next_title': next_title,
