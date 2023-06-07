@@ -57,7 +57,7 @@ for file in os.listdir('text'):
     filepath = os.path.join('text', file)
     index = file.split('.')[0]
     title = chapter_titles[index]
-    heading = chapter_headings[index].format(title)
+    heading = chapter_headings[index] % (title)
     outpath = os.path.join('site', get_chapter_outpath(index))
 
     # Link to previous and next chapters
