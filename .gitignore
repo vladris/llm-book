@@ -158,3 +158,4 @@ cython_debug/
 
 # Generated files
 site/*.html
+site/images/*
