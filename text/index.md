@@ -2,7 +2,7 @@
 
 ## Enhancing Software Systems with Language Models
 
-![Book cover](images/cover/cover.png)
+![Book cover](images/title/cover.png)
 
 > *Giant language minds  
 > Transforming words and culture  
