@@ -46,3 +46,7 @@ class ChatTemplate:
         return openai.ChatCompletion.create(
             model='gpt-3.5-turbo',
             **instance)
+
+
+def count_tokens(message):
+    raise NotImplementedError()
