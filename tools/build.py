@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from baku.markdown import make_markdown_processor
 from baku.templating import render, VerySimpleTemplate
@@ -48,6 +49,22 @@ def get_chapter_outpath(index):
         title = chapter_titles[index]
         return title.lower().replace(' ', '-') + '.html'
 
+
+# Add anchors to H2 headings
+def add_anchors(html_string):
+    pattern = r'<h2>(.*?)</h2>'
+
+    matches = re.findall(pattern, html_string, re.DOTALL)
+
+    for match in matches:
+        id_text = match.lower().replace(' ', '-')
+
+        replacement = f'<h2 id="{id_text}">{match}</h2>'
+        html_string = re.sub(pattern, replacement, html_string, count=1)
+
+    return html_string
+
+
 # Render markdown files
 md = make_markdown_processor()
 for file in os.listdir('text'):
@@ -74,14 +91,16 @@ for file in os.listdir('text'):
         text = f.read()
 
     with open(outpath, 'w+') as f:
-        f.write(render(VerySimpleTemplate('./tools/template.html'), {
+        output = render(VerySimpleTemplate('./tools/template.html'), {
             'content': md(text),
             'title': title,
             'heading': heading,
             'prev_title': prev_title,
             'prev_link': prev_link,
             'next_title': next_title,
-            'next_link': next_link,}))
+            'next_link': next_link,})
+        output = add_anchors(output)
+        f.write(output)
 
 
 # Copy the directory tree
