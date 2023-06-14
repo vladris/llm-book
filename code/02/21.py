@@ -3,13 +3,13 @@ import os
 
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-prompt = 'Write a paragraph about the benefits of meditation.'
-suffix = 'Meditation has been shown to reduce stress and anxiety, improve focus and attention, and promote overall well-being.'
+prompt = 'Write a story about a young girl who discovers a magical world.'
+stop = ['The end', 'To be continued', 'And they lived happily ever after.']
 
-response = openai.Completion.create(
-    model='text-davinci-003',
-    prompt=prompt,
-    suffix=suffix,
-    max_tokens=100)
+response = openai.ChatCompletion.create(
+    model='gpt-3.5-turbo',
+    messages=[{'role': 'user', 'content': prompt}],
+    stop=stop,
+    max_tokens=500)
 
-print(response.choices[0].text)
+print(response.choices[0].message.content)

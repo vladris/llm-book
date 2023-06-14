@@ -3,11 +3,12 @@ import os
 
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-prompt = 'Write an article about the history of space exploration.'
+prompt = 'Generate a name for a new coffee brand.'
 
 response = openai.ChatCompletion.create(
     model='gpt-3.5-turbo',
-    max_tokens=1000,
+    n=3,
     messages=[{'role': 'user', 'content': prompt}])
 
-print(response.choices[0].message.content)
+for choice in response.choices:
+    print(choice.message.content)

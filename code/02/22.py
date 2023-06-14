@@ -10,6 +10,9 @@ response = openai.ChatCompletion.create(
     model='gpt-3.5-turbo',
     messages=[{'role': 'user', 'content': prompt}],
     stop=stop,
+    stream=True,
     max_tokens=500)
 
-print(response.choices[0].message.content)
+for chunk in response:
+    if hasattr(chunk.choices[0].delta, 'content'):
+        print(chunk.choices[0].delta.content, end='', flush=True)

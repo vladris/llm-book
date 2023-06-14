@@ -3,12 +3,12 @@ import os
 
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-prompt = 'Generate a name for a new coffee brand.'
+prompt = 'Draft a nondisclosure agreement (NDA) between two parties'
 
 response = openai.ChatCompletion.create(
     model='gpt-3.5-turbo',
-    n=3,
+    temperature=0.5,
+    max_tokens=100,
     messages=[{'role': 'user', 'content': prompt}])
 
-for choice in response.choices:
-    print(choice.message.content)
+print(response.choices[0].message.content)
