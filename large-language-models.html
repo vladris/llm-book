@@ -73,7 +73,7 @@ These models can learn from massive amounts of data, often referred to as
 capabilities in recent years, with models such as GPT-3 and, more recently,
 GPT-4 achieving remarkable results on a wide range of benchmarks.</p>
 
-<p><img src="./images/02/fig1.png" alt="Figure 1"></p>
+<p><img src="./images/02/fig1.png" alt="Figure 2.1"></p>
 
 <p><em>Figure 2.1: Training, fine tuning, and prompting.</em></p>
 
@@ -613,7 +613,7 @@ represent around 75 words. OpenAI offers an online tokenizer at
 includes spaces and punctuation). Figure 2.2 shows an even nicer example, where
 tokenization is not quite one-to-one with the text.</p>
 
-<p><img src="images/02/fig2.png" alt="Figure 2"></p>
+<p><img src="images/02/fig2.png" alt="Figure 2.2"></p>
 
 <p><em>Figure 2.2: Example of tokenization using the OpenAI online tokenizer. Each
 highlight represents a token.</em></p>
@@ -675,6 +675,657 @@ tokens, and potentially write code to parse text into tokens, is that sooner or
 later we will run into token limits.</p>
 
 <h3>Limits</h3>
+
+<p>Token limits are not artificial limitations, rather they come from the
+architecture of the models themselves. For example, <code>text-davinci-003</code> has a
+limit of 4097 tokens and <code>gpt-3.5-turbo</code> has a limit of 4096 tokens. Limits are
+combined between prompt and response. That means the more tokens you use in the
+input, the fewer will be left for the output.</p>
+
+<p><code>gpt-4-32k</code>, a member of the GPT 4 family, offers a much higher limit of 32768
+tokens. The GPT 3.5 family of models now also offers <code>gpt-3.5-turbo-16k</code>, a
+16,384 token version of <code>gpt-3.5-turbo</code>. Over time, we’ll probably see larger
+and larger token limits as the field advances, but even with 32K tokens, you
+still can’t type your whole novel into a prompt and ask the model to rewrite it
+from 1st to 3rd person.</p>
+
+<p>The OpenAI Models reference shows the token limits for each available model:
+<a href="https://platform.openai.com/docs/models/">https://platform.openai.com/docs/models/</a>.</p>
+
+<p>Since this book focuses on building software around large language models, token
+limits will be a key constraint. In most cases, we will need to squeeze into a
+prompt an ask, some task-specific context, and some user input, and leave enough
+room for a reply. This is where memory implementations come into play (chapter 5
+is all about memory).</p>
+
+<p>Depending on your scenario, you’ll need to consider the token limits when
+picking a model to work with.</p>
+
+<p>You might wonder why not to simply pick the highest limit model (currently
+<code>gpt-4-32k</code>). The reason is the more tokens we use, the more we have to pay:
+pricing is also calculated based on the number of tokens used.
+<code>text-davinci-003</code> costs 2 cents per 1000 tokens, while the newer, more
+efficient <code>gpt-3.5-turbo</code> is much cheaper, at 0.15 cents per 1000 input tokens
+and 0.2 cents per 1000 output tokens. GPT-4 models have different pricing
+depending on scenario and context size. The OpenAI pricing page shows how each
+model is priced: <a href="https://openai.com/pricing">https://openai.com/pricing</a>.</p>
+
+<p>Finally, when working with chat completion models, some special tokens are
+automatically included so the model can accurately separate the different roles
+and messages. Remember a chat completion model doesn’t take as input just a text
+prompt, rather a list of messages issued by <code>system</code>, <code>user</code>, or <code>assistant</code>.
+The messages are separated by the special tokens <code>&lt;|start|&gt;</code> and <code>&lt;|stop|&gt;</code>,
+which are injected automatically. <code>gpt-4</code> and <code>gpt-3.5-turbo</code> have slightly
+different token overhead per message<sup id="fnref1"><a href="#fn1" rel="footnote">1</a></sup>. We won’t cover the full implementation of
+counting tokens for a chat completion model here, but our <code>llm_utils</code> library
+provides a <code>count_tokens()</code> function we’ll use when we need an accurate token
+count.</p>
+
+<h3>Key takeaways</h3>
+
+<p>Before moving away from the topic of tokens, let’s quickly recap:</p>
+
+<ul>
+<li>Each model has a token limit (maximum number of tokens it can process), which
+is a combination of input and output tokens.</li>
+<li>Pricing is calculated based on the number of tokens used.</li>
+<li>Rule of thumb: for English, a token is about 3/4 of a word (100 tokens for 75
+words).</li>
+<li>You can quickly check the tokenization of some text using the online tokenizer
+provided by OpenAI (<a href="https://platform.openai.com/tokenizer">https://platform.openai.com/tokenizer</a>).</li>
+<li>You can programmatically work with tokens using the <code>tiktoken</code> library.</li>
+</ul>
+
+<p>The main use-cases for programmatically counting tokens are figuring out whether
+a prompt fits within the model limits and to estimate the cost of a call. Since
+using these models can get expensive<sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>, let’s see how we can get the most out
+of an API call.</p>
+
+<h2 id="api-responses">API responses</h2>
+
+<p>We’ll cover some of the parameters we can pass to API calls but first, let’s
+understand the responses we get back.</p>
+
+<p>Let’s rerun our “Hello world” example, but instead of just printing the text
+returned by the model, we’ll print the whole reply.</p>
+
+<h3>Completion response</h3>
+
+<p>Listing 2.12 shows the code, the only difference from listing 2.2 is on the last
+line.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="s1">&#39;Say &quot;Hello world&quot; in Python&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.12: Print whole response.</em></p>
+
+<p>Listing 2.13 shows the JSON response we get when running this code.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;choices&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;finish_reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;logprobs&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;text&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;\n\nprint(\&quot;Hello world\&quot;)&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1682285944</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cmpl-78biCYERRqP7jSHMBy8nXoMVshOAr&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;text-davinci-003&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;object&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;text_completion&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;usage&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;completion_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;prompt_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;total_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 2.13: Response shape.</em></p>
+
+<p>First, we have an array of <code>choices</code>. In this case, it contains a single
+element, but we’ll soon see how we can get the model to give us multiple
+responses for the same prompt, so we can choose from them.</p>
+
+<p>Each choice in the array consists of 4 fields:</p>
+
+<ul>
+<li><code>finish_reason</code>: This shows why the processing finished. If all went well, the
+value should be stop. This can also be <code>length</code>, which means the model
+would’ve continued but it hit the token limit (we can set a lower limit using
+the <code>max_tokens</code> parameters as we’ll see in the next section). More recently,
+<code>function_call</code> is another possible response, in which the model requests to
+call a function we made available to it (more about this in chapter 6). The
+other possible value is <code>content_filter</code> – when OpenAI’s content filters flag
+the content and abort processing.</li>
+<li><code>index</code>: The index of the choice in the array, 0-based. We have a single
+choice in this response, so the value is 0.</li>
+<li><code>logprobs</code>: For advanced uses, we can ask the model to return the log
+probabilities of the tokens chosen in the completion.</li>
+<li><code>text</code>: Contains the response text.</li>
+</ul>
+
+<p>We’ll soon see an example of responses with multiple choices.</p>
+
+<p>Next, we have some metadata:</p>
+
+<ul>
+<li><code>created</code> is the Unix timestamp of when the message was created (can you tell
+when I wrote this chapter?).</li>
+<li><code>id</code> is a unique identifier for the response.</li>
+<li><code>model</code> is the model used to generate the response.</li>
+<li><code>object</code> is the type of the response object, this is useful for deserializers
+when translating the JSON response into an object in your programming language
+of choice.</li>
+</ul>
+
+<p>Finally, we have some usage data:</p>
+
+<ul>
+<li><code>completion_tokens</code> is the number of tokens in the reply (the generated text).</li>
+<li><code>prompt_tokens</code> is the number of tokens in the input prompt.</li>
+<li><code>total_tokens</code> is the sum of these – this is what OpenAI charges for the call.</li>
+</ul>
+
+<p>Chat completion responses are very similar, with some minor differences.</p>
+
+<h3>Chat completion response</h3>
+
+<p>Let’s print a full response from our “Hello world” example running against
+<code>gpt-3.5-turbo</code>. Listing 2.14 shows the code for this. Again, the only
+difference between this and listing 2.3 is on the last line.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Say &quot;Hello world&quot; in Python&#39;</span><span class="p">}</span>
+    <span class="p">])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.14: Print whole response from chat completion.</em></p>
+
+<p>We get a response like the one in listing 2.15.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;choices&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;finish_reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;print(\&quot;Hello world\&quot;)&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;created&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1682286483</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;chatcmpl-78bqtRV5BuMFaVX2S9LNvU3drfdoH&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gpt-3.5-turbo-0301&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;object&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;chat.completion&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;usage&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;completion_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;prompt_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;total_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 2.15: Response shape for chat completion.</em></p>
+
+<p>This is very similar to the completion response, so we’ll only highlight the
+differences:</p>
+
+<ul>
+<li>The entries under <code>choices</code> don’t have a <code>logprob</code> field and instead of
+<code>text</code>, we get the <code>message</code> object consisting of <code>content</code> (the text of the
+response) and <code>role</code> (<code>assistant</code>).</li>
+<li>The model is obviously different, but note that even though we asked for a
+chat completion from <code>gpt-3.5-turbo</code>, the response has <code>gpt-3.5-turbo-0301</code>.
+That’s because OpenAI periodically updates some of its models. This tells us
+we are using the March 1st instance of the model.</li>
+<li><code>object</code> is also obviously different, <code>chat.completion</code> rather than the
+previous <code>text_completion</code>.</li>
+</ul>
+
+<p>Now that we have a good understanding of what the API responds with, let’s see
+how we can tune our requests.</p>
+
+<h2 id="api-parameters">API parameters</h2>
+
+<p>So far, we made a couple of very simple completion calls, providing only the
+model we wanted to use and a prompt (or list of messages in the chat completion
+case). The APIs support a variety of other parameters, so let’s take a look at
+these next. We’ll cover a few key ones in-depth, then provide a quick overview
+of a few others.</p>
+
+<h3>OpenAI playground</h3>
+
+<p>We have Python code samples for calling the OpenAI API, but you can also use the
+OpenAI playground (<a href="https://platform.openai.com/playground/">https://platform.openai.com/playground/</a>) to play with
+prompts and parameters. Figure 2.3 is a screenshot of the playground. On the
+right side you can see a <em>Mode</em> and a <em>Model</em> picker, followed by all available
+parameters.</p>
+
+<p>The main area of the screen is used for prompting. Figure 2.3 shows a big text
+box for the <code>text-davinci-003</code> prompt. If you switch to a chat completion model
+like <code>gpt-3.5-turbo</code>, this will change to a view where you can add chat
+messages.</p>
+
+<p>The <em>Submit</em> button sends the request to the model.</p>
+
+<p>If you click the <em>View code</em> button, the playground generates the corresponding
+Python API call.</p>
+
+<p><img src="images/02/fig3.png" alt="Figure 2.3"></p>
+
+<p><em>Figure 2.3: Screenshot of the OpenAI playground.</em></p>
+
+<h3>Key parameters</h3>
+
+<p>First, a quick addendum: in the case of chat completion models, we already saw
+the <code>messages</code> parameter being populated with messages with <code>role</code> and <code>content</code>
+parts (the <em>role</em> issuing the message, which can be <code>system</code>, <code>user</code>, or
+<code>assistant</code> and the <em>content</em> of the message). The API supports an additional,
+optional parameter <code>name</code>. This represents the name of the author of the
+message.</p>
+
+<p>The key parameters we’ll cover are:</p>
+
+<ul>
+<li><code>max_tokens</code> - Limits the number of tokens in the reply. No limit by default
+(other than the total context limit of the model).</li>
+<li><code>n</code> - How many completions to generate in response. 1 by default but we can
+ask for more.</li>
+<li><code>temperature</code> - A number between 0 and 2, with a default of 1. The lower the
+temperature, the more deterministic the model will be, the higher the
+temperature, the more random.</li>
+</ul>
+
+<p>Another important API parameter, available in the latest versions of GPT 4 and
+3.5-turbo is <code>functions</code>, which allows us to describe functions the model can
+call if it determines they would help produce the final response. We will cover
+these at length in chapter 6, where we look at how we can integrate large
+language models with external systems. For now, let’s stick with the basics.
+Consider how we can use these parameters based on our scenarios.</p>
+
+<h3>max_tokens</h3>
+
+<p>The <code>max_tokens</code> parameter controls the maximum number of tokens in the
+generated text. If you set a low value for <code>max_tokens</code>, you get back shorter
+outputs. Note this parameter does not make the model rephrase the response to
+make it shorter so it fits the token limit, rather the response simply gets
+truncated.</p>
+
+<p>Listing 2.16 shows an example using a low value for <code>max_tokens</code>.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;What are the main causes of climate change?&#39;</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.16 Example use-case for low token limit.</em></p>
+
+<p>We know what <code>message</code> is as we saw this before. It contains the <code>content</code>
+(output text) and the <code>role</code> (<code>assistant</code>). There’s also a <code>finish_reason</code> and
+an <code>index</code>.</p>
+
+<p>If you run the code in listing 2.16, the response you get might be cut off
+mid-sentence. Remember, since these models are non-deterministic, getting a
+completion for the same prompt yields different responses, so I can’t know for
+sure that is the case, but that is what would usually happen when the model
+would output a longer response but we limit it with <code>max_tokens</code>. If you inspect
+the full <code>response</code> object, the <code>finish_reason</code> property on the choice could be
+<code>length</code> instead of <code>stop</code>, indicating the model hit the token limit and had to
+stop because of that.</p>
+
+<p>If you want the model to rephrase the response so it is more concise, you will
+have to include these instructions in the prompt – explicitly ask for a short
+response. We’ll talk more about prompts in the next chapter. <code>max_tokens</code> simply
+cuts off the output once the limit is reached.</p>
+
+<p>So far, we only ever had a single choice in our response. The API allows us to
+ask for multiple variations of a response to a prompt through the n parameter.</p>
+
+<h3>n</h3>
+
+<p>The <code>n</code> parameter controls the number of responses generated by the API call.
+Setting n to a value greater than 1 will generate multiple responses, while
+setting it to 1 will generate a single response.</p>
+
+<p>Note that setting <code>n</code> to a value greater than 1 can increase the variety and
+diversity of the generated responses, but it can also increase the computational
+cost and response time of the API call. The appropriate value for n depends on
+the specific use case and desired number of responses.</p>
+
+<p>Listing 2.17 shows a use-case for soliciting multiple choices from the model.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Generate a name for a new coffee brand.&#39;</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">n</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}])</span>
+
+<span class="k">for</span> <span class="n">choice</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">choice</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.17: Soliciting multiple choices from the model.</em></p>
+
+<p>When using large language models for brainstorming/generating content, it might
+make sense to ask for different versions of a response to a prompt and let the
+user pick the one they like best. Or have some post-processing that evaluates
+the different responses and selects the one most appropriate for your scenario.</p>
+
+<h3>temperature</h3>
+
+<p><code>temperature</code> is an important parameter to keep in mind. In OpenAI models,
+temperature is used to control how diverse and creative we want responses to be.
+Temperature can be a value between 0 (least creative) to 2 (most creative), with
+a default of 1. </p>
+
+<p>When you set the temperature to a lower value, the model generates outputs that
+are closer to its most confident predictions. This can result in more
+conservative and predictable responses.</p>
+
+<p>However, setting a low temperature can also result in outputs that are
+repetitive and lacking in novelty. This is because the model will tend to
+generate the same outputs repeatedly, rather than exploring the full range of
+possibilities.</p>
+
+<p>A low temperature is most useful when you want more predictable and conservative
+responses. For example, if you are using the model to generate text for a news
+article or a legal document, you may want to use a low temperature to ensure
+that the language is clear and concise. Listing 2.18 shows an example of this
+use-case.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Draft a nondisclosure agreement (NDA) between two parties&#39;</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.18: Scenario for using a lower temperature.</em></p>
+
+<p>If we want help with drafting a legal document, we probably don’t want the model
+to get too imaginative.</p>
+
+<p>On the other hand, if we are looking for more creative and diverse responses, we
+may want to use a higher temperature. This will allow the model to explore a
+wider range of possibilities, resulting in more interesting and unique outputs.
+Listing 2.19 shows a prompt for which we likely want a high temperature.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Write a short story about a man who discovers a mysterious book in an old library.&#39;</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.19: Scenario for using a higher temperature.</em></p>
+
+<p>Play with the temperature setting and see what responses you get. As the
+temperature gets closer to 2, the responses start being incoherent. As the
+temperature gets closer to 0, the responses are more deterministic. That said,
+even setting the temperature to 0 does not guarantee the same prompt elicits the
+exact same response every time.</p>
+
+<h3>Other parameters</h3>
+
+<p>Let’s quickly review a few of the other available parameters, though we won’t
+cover them in depth. You can always check the OpenAI API reference
+(<a href="https://platform.openai.com/docs/api-reference">https://platform.openai.com/docs/api-reference</a> for the full list of available
+parameters).</p>
+
+<p>The completion models (but not the chat completion ones) also accept a <code>suffix</code>
+parameter. You can use the <code>suffix</code> parameter to provide additional context to
+the API for generating more relevant and coherent text. The API will take the
+<code>suffix</code> text into account when generating the final completion. We can use this
+to generate more coherent and relevant responses.</p>
+
+<p>Listing 2.20 shows a use-case for this.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Write a paragraph about the benefits of meditation.&#39;</span>
+<span class="n">suffix</span> <span class="o">=</span> <span class="s1">&#39;Meditation has been shown to reduce stress and anxiety, improve focus and attention, and promote overall well-being.&#39;</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+    <span class="n">suffix</span><span class="o">=</span><span class="n">suffix</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.20: Scenario for using a suffix.</em></p>
+
+<p>Remember this only works with completion models like <code>text-davinci-003</code>, not
+with chat completion models like <code>gpt-3.5-turbo</code>.</p>
+
+<p><code>stop</code> allows us to specify up to 4 sequences of text that will make the model
+stop generating more text. Listing 2.21 shows an example of using this
+parameter.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Write a story about a young girl who discovers a magical world.&#39;</span>
+<span class="n">stop</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;The end&#39;</span><span class="p">,</span> <span class="s1">&#39;To be continued&#39;</span><span class="p">,</span> <span class="s1">&#39;And they lived happily ever after.&#39;</span><span class="p">]</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}],</span>
+    <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.21: Scenario for using stop text.</em></p>
+
+<p>In this example, we are using the <code>stop</code> parameter to specify three different
+strings that the API should use as stop criteria for generating the completion.
+Once the API generates a completion that includes one of the specified stop
+strings, it will stop generating further text.</p>
+
+<p>Note that the appropriate value for <code>stop</code> depends on the specific use case and
+desired stop criteria. In this example, we used typical story ending phrases as
+the stop parameter, but you can also use other phrases or keywords depending on
+the content and structure of the prompt. We’re also not guaranteed that the
+response will end with one of these phrases.</p>
+
+<p><code>stream</code> enables streaming responses, so you don’t have to wait for the whole
+call to complete before starting processing. This should come in handy when
+integrating with a front-end, so users aren’t stuck waiting for a long call to
+complete. Listing 2.22 updates the example in listing 2.21 to stream the
+response.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Write a story about a young girl who discovers a magical world.&#39;</span>
+<span class="n">stop</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;The end&#39;</span><span class="p">,</span> <span class="s1">&#39;To be continued&#39;</span><span class="p">,</span> <span class="s1">&#39;And they lived happily ever after.&#39;</span><span class="p">]</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}],</span>
+    <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span>
+    <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">response</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">delta</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">delta</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">end</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 2.22: Scenario for streaming a response.</em></p>
+
+<p>In this case, we set <code>stream</code> to <code>True</code>. We no longer get our <code>response</code> in one
+go, rather we get a series of <em>chunks</em> asynchronously. Each chunk contains a
+part of the response. We check to make sure there is <code>content</code> in the <code>chunk</code>
+and if so, we print it to the console. We set <code>flush</code> to <code>True</code> so we can see
+the text being printed as it comes in (otherwise <code>print()</code> might flush later and
+we won’t get as good of a real-time example).</p>
+
+<p>A couple of things to keep in mind when using streaming: the response no longer
+contains the <code>usage</code> data (token count), so if you care about this you’ll have
+to calculate it yourself using <code>tiktoken</code> as we saw earlier in the chapter.
+Another drawback is moderation – since the response gets streamed in chunks,
+it’s harder to reason over it holistically.</p>
+
+<h3>Parameter recap</h3>
+
+<p>We’ve seen quite a few parameters, so let’s quickly review. Table 2.3 lists the
+parameters we talked about and when we’d want to use them.</p>
+
+<table>
+<thead>
+<tr>
+<th>PARAMETER</th>
+<th>DESCRIPTION</th>
+<th>USE-CASE</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><code>max_tokens</code></td>
+<td>Limit the number of tokens</td>
+<td>We want to limit the length of the response</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>Return multiple completions</td>
+<td>We want multiple options to pick from</td>
+</tr>
+<tr>
+<td><code>temperature</code></td>
+<td>Adjust how “creative” responses are</td>
+<td>We want a more deterministic (low temperature) or a more creative (high temperature) response</td>
+</tr>
+<tr>
+<td><code>suffix</code></td>
+<td>Provide an ending phrase in addition to the prompt</td>
+<td>Make the model connect the prompt with the suffix</td>
+</tr>
+<tr>
+<td><code>stop</code></td>
+<td>Provide up to 4 stop phrases</td>
+<td>Immediately stop completion when one of the suffixes is generated</td>
+</tr>
+<tr>
+<td><code>stream</code></td>
+<td>Stream the response</td>
+<td>We don’t want to block until processing is fully done</td>
+</tr>
+</tbody>
+</table>
+
+<p><em>Table 2.3: Parameter review.</em></p>
+
+<p>Notably we haven’t covered the <code>functions</code> parameter, which allows us to
+describe functions to the large language model, and the model can choose to
+output a JSON object containing arguments to call those functions. As mentioned
+before, we’ll cover this in chapter 6, when we look at the various ways we can
+integrate large language models with external systems.</p>
+
+<p>We covered a lot of ground in this chapter: from an overview of large language
+models to the various OpenAI model offerings, to what we can get out of their
+API, including how to interpret responses and some of the most common request
+parameters.</p>
+
+<p>With these foundations out of the way, in the next chapter we’ll focus on the
+next layer of the stack, which is part of the paradigm shift – prompt
+engineering.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>Large language models contain huge numbers of parameters. They are extremely
+expensive to train.</li>
+<li>A pre-trained model can be optionally fine-tuned and prompted many times –
+that is how we are using the large language models hosted by OpenAI.</li>
+<li>Tokens are how models represent text internally. In English, a token is about
+3/4 of a word.</li>
+<li>Models have an upper bound of how many tokens they can used due to their
+architecture. OpenAI charges API calls based on token usage.</li>
+<li>Completion models (like <code>text-davinci-003</code>) take a prompt and return text most
+likely to follow the prompt.</li>
+<li>Chat completion models (like <code>gpt-3.5-turbo</code>) are similar to completion models
+but optimized for chat interactions.</li>
+<li>We can try things out on the OpenAI playground at
+<a href="https://platform.openai.com/playground/">https://platform.openai.com/playground/</a>.</li>
+<li>We can configure the maximum number of tokens we want in a response
+(<code>max_tokens</code>), how many versions of a response we want (<code>n</code>), how creative
+should the response be (<code>temperature</code>). We can also configure optional
+<code>suffix</code> which the model will attempt to connect with the prompt, a set of
+<code>stop</code> phrases, and, if we want, we can <code>stream</code> the response.</li>
+</ul>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p>The OpenAI cookbook provides a recipe for token counting for this type of
+  models: <a href="https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb">https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb</a>&nbsp;<a href="#fnref1" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn2">
+<p>This is true when leveraging large language models in production, with
+  many users exercising the code and generating calls to OpenAI. You should
+  be able to run all the examples in this book for a few dollars (or the
+  sign up $5 credit).&nbsp;<a href="#fnref2" rev="footnote">&#8617;</a></p>
+</li>
+
+</ol>
+</div>
 
 </article>
 <nav>
