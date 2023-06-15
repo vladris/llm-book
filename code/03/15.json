@@ -3,6 +3,6 @@
     "max_tokens": 100,
     "messages": [
         { "role": "system", "content": "You are a lawyer." },
-        { "role": "user", "content": "{action}: {document}" }
+        { "role": "user", "content": "{{action}}: {{document}}" }
     ]
 }

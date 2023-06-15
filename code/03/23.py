@@ -12,7 +12,7 @@ while True:
     print(response.choices[0].message.content)
     selection = json.loads(response.choices[0].message.content)
 
-    response = ChatTemplate(selection['as'] + '_chat.json').completion({
+    response = ChatTemplate.from_file(selection['as'] + '_chat.json').completion({
         'action': selection['action'],
         'document': selection['document']})
     print(response.choices[0].message.content)

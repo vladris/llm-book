@@ -2,7 +2,7 @@ from llm_utils import ChatTemplate
 
 chat = ChatTemplate(
     {'messages': [{'role': 'system', 'content': 'You are an AI chat program.'},
-                  {'role': 'user', 'content': '{prompt}'}]})
+                  {'role': 'user', 'content': '{{prompt}}'}]})
 
 while True:
     prompt = input('user: ')
