@@ -12,7 +12,13 @@
   * [Using OpenAI](./a-new-paradigm.html#using-openai)
   * [In this book](./a-new-paradigm.html#in-this-book)
   * [Summary](./a-new-paradigm.html#summary)
-* Chapter 2: Large Language Models
+* [Chapter 2: Large Language Models](./large-language-models.html)
+  * [Large language models](./large-language-models.html#large-language-models)
+  * [OpenAI models](./large-language-models.html#openai-models)
+  * [Tokens](./large-language-models.html#tokens)
+  * [API responses](./large-language-models.html#api-responses)
+  * [API parameters](./large-language-models.html#api-parameters)
+  * [Summary](./large-language-models.html#summary)
 * Chapter 3: Prompt Engineering
 * Chapter 4: Learning and Tuning
 * Chapter 5: Memory and Embeddings
