@@ -25,9 +25,9 @@ chapter_titles = {
 
 # Chapter heading mappings
 chapter_headings = {
-    'index': '%s ~ Large Language Models at Work',
-    'toc': '%s ~ Large Language Models at Work',
-    'preface': '%s ~ Large Language Models at Work',
+    'index': '%s ~ LLMs at Work',
+    'toc': '%s ~ LLMs at Work',
+    'preface': '%s ~ LLMs at Work',
     '01': 'Chapter 1: %s',
     '02': 'Chapter 2: %s',
     '03': 'Chapter 3: %s',
@@ -37,6 +37,8 @@ chapter_headings = {
 chapters = ['index', 'toc', '01', '02', '03']
 
 # Get chapter outpath
+
+
 def get_chapter_outpath(index):
     if index == 'index':
         return 'index.html'
@@ -76,10 +78,12 @@ for file in os.listdir('text'):
     i = chapters.index(index)
     prev_title, prev_link = None, None
     if i != 0:
-        prev_title, prev_link = chapter_titles[chapters[i - 1]],  get_chapter_outpath(chapters[i - 1])
+        prev_title, prev_link = chapter_titles[chapters[i - 1]
+                                               ],  get_chapter_outpath(chapters[i - 1])
     next_title, next_link = None, None
     if i != len(chapters) - 1:
-        next_title, next_link = chapter_titles[chapters[i + 1]], get_chapter_outpath(chapters[i + 1])
+        next_title, next_link = chapter_titles[chapters[i + 1]
+                                               ], get_chapter_outpath(chapters[i + 1])
 
     print(f'Processing {filepath} -> {outpath}')
     with open(filepath, 'r') as f:
@@ -93,7 +97,7 @@ for file in os.listdir('text'):
             'prev_title': prev_title,
             'prev_link': prev_link,
             'next_title': next_title,
-            'next_link': next_link,})
+            'next_link': next_link, })
         output = add_anchors(output)
         f.write(output)
 
