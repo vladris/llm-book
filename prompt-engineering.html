@@ -392,6 +392,815 @@ lawyer and has two customizable parts: an <code>action</code> and a <code>docume
 
 <p>Figure 3.1 shows how prompt templating works.</p>
 
+<p><img src="images/03/figure1.png" alt="Figure 3.1"></p>
+
+<p>We have a prompt template with some parameters. The prompt template contains our
+tuned prompt text, but also includes some customizable parts captured between
+<code>{{}}</code>. We take the user input and use that to replace the <code>{{}}</code> parameters and
+end up with a prompt we send to the large language model.</p>
+
+<p>We can then implement a Python class that handles templates, as seen in listing
+3.13.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">insert_params</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;{{(.*?)}}&quot;</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+        <span class="n">replacement</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">replacement</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">string</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;{{&quot;</span> <span class="o">+</span> <span class="n">match</span> <span class="o">+</span> <span class="s2">&quot;}}&quot;</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">string</span>
+
+<span class="k">class</span> <span class="nc">Template</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span> <span class="o">=</span> <span class="n">template</span>
+
+    <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span><span class="n">template_file</span><span class="p">):</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">template_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Template</span><span class="p">(</span><span class="n">template</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+        <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_params</span><span class="p">(</span><span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.13: Consuming a completion prompt template.</em></p>
+
+<p>This might look a bit complicated, but it really isn’t. First, we implement an
+<code>insert_params()</code> function, which takes a string and a set of keyword arguments
+(see sidebar). It searches for <code>{{}}</code> parameters using a regular expression and
+replaces these with the actual values provided as <code>kwargs</code>.</p>
+
+<p>Next, we define a <code>Template</code> class. The constructor takes a template dictionary
+and stores it as a class member. We define a static <code>from_file()</code> method which
+loads the template JSON from the given <code>template_file</code> and constructs a
+<code>Template</code> object based on that. Finally, we define a <code>completion()</code> method that
+takes some parameters (in our case, these would be the actual <code>action</code> and
+<code>document</code>), makes a deep copy of the prompt template which it updates with the
+given parameters, then calls the OpenAI Completion API, and expand the
+parameters available in <code>template</code>.</p>
+
+<blockquote>
+<p><strong>Sidebard: Keyword Arguments in Python</strong></p>
+
+<p>In Python, <code>**kwargs</code> is a special syntax used to pass a keyworded,
+variable-length argument list to a function. The <code>**kwargs</code> parameter in a
+function allows you to pass an arbitrary number of keyword arguments (as
+key/value) to that function.</p>
+
+<p><code>**kwargs</code> can be used along with other parameters in a function definition,
+but it should always come after all the other parameters, including any default
+parameters.</p>
+
+<p>The <code>openai.Completion.create</code> (and <code>openai.ChatCompletion.create()</code>) expect
+named arguments (like <code>n=1</code>, <code>max_tokens=100</code> etc.). Instead of us checking if
+each of the supported arguments appears in our JSON files and composing the
+function call based on that, we simply forward the dictionary object (key/value
+pairs) we deserialized from JSON to the <code>create()</code> function. It will
+conveniently pick up the parameters it understands from there – for example if
+we specify <code>&quot;temperature&quot;: 0.5</code> in our JSON, when we load the JSON file this
+gets mapped into the key/value pair <code>&quot;temperature&quot;: 0.5</code>, then resolved as the
+function argument <code>temperature=0.5</code>.</p>
+
+<p>This is not a Python book but using this “trick” simplifies our code a lot, so
+it’s worth understanding. You can think of this as forwarding the properties
+from the JSON file directly to the function, then the function interprets the
+ones it <em>understands</em> and ignores the rest.</p>
+
+<p>We do the same with the <code>parameters</code> when we call <code>insert_params()</code> – this
+formats the string so the function looks for the keys that appear inside the
+string between <code>{{}}</code> and it ignores additional key/value pairs.</p>
+</blockquote>
+
+<p>Now we have a template and a function that can take it and turn it into an API
+call. The <code>Template</code> class is part of the <code>llm_utils</code> module introduced in
+chapter 1 and covered in appendix A.</p>
+
+<p>We’ll be using prompt templates throughout the remainder of the book. We already
+saw how to call the OpenAI API directly and some of the customizable parameters.
+Instead of repeating the OpenAI API calls, we’ll just show the prompt templates
+and parameters.</p>
+
+<p>Since we’ll be using prompt templates throughout the remainder of the book, this
+module gives us an easy way to import them when needed in our code samples.
+Listing 3.14 shows how this works end-to-end.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">Template</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">Template</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;lawyer.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="s1">&#39;draft&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="s1">&#39;a nondisclosure agreement (NDA) between two parties&#39;</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.14: Using the prompt template.</em></p>
+
+<p>Now we can reuse our prompts by simply loading the JSON prompt template file and
+calling the <code>completion()</code> function with the right parameters to be replaced.</p>
+
+<p>To keep things simple, we used <code>text-davinci-003</code>. Since this is more expensive
+than <code>gpt-3.5-turbo</code>, let’s also provide an alternative that templates chat
+completions. Listing 3.15 shows how our lawyer large language model template
+would look like for chat completions. We’ll store this as <code>lawyer_chat.json</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.2</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are a lawyer.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{action}}: {{document}}&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 3.15: Lawyer prompt template for chat completion.</em></p>
+
+<p>The JSON looks a lot like the one in listing 3.11, except instead of a <code>prompt</code>
+string property we have a <code>messages</code> array property containing a list of <code>role</code>
+and <code>content</code> pairs. This is very much in line with the differences between the
+completion API and the chat completion API.</p>
+
+<p>Let’s also implement the corresponding <code>ChatTemplate</code> class (listing 3.16).</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">insert_params</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;{{(.*?)}}&quot;</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+        <span class="n">replacement</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">replacement</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">string</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;{{&quot;</span> <span class="o">+</span> <span class="n">match</span> <span class="o">+</span> <span class="s2">&quot;}}&quot;</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">string</span>
+
+<span class="k">class</span> <span class="nc">ChatTemplate</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span> <span class="o">=</span> <span class="n">template</span>
+
+    <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span><span class="n">template_file</span><span class="p">):</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">template_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ChatTemplate</span><span class="p">(</span><span class="n">template</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]:</span>
+            <span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.16: Consuming a chat completion prompt template.</em></p>
+
+<p>Not very different from listing 3.13. We have the same <code>insert_params()</code>
+function. We still take a template JSON in the constructor and store it as a
+member, and we have a static <code>from_file()</code> method. The only difference is in the
+<code>completion()</code> method: instead of inserting the parameters in the <code>prompt</code>
+string, we now iterate over the <code>messages</code> and insert parameters in each content
+item. This class is also available in <code>llm_utils</code>.</p>
+
+<p>The equivalent call that puts it all together is very similar to listing 3.14:
+see listing 3.17.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;lawyer_chat.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="s1">&#39;draft&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="s1">&#39;a nondisclosure agreement (NDA) between two parties&#39;</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.17: Using the lawyer chat completion prompt template.</em></p>
+
+<p>We now have a way to store valuable prompts (including additional call
+parameters like <code>temperature</code>) as JSON files, and only customize the moving
+parts. This is in line with good software practices like the
+“don’t-repeat-yourself” principle.</p>
+
+<p>In general, when integrating a large language model into a software solution,
+you will have one or more tuned prompts you’ll want to use. A lot of the prompt
+content will be common across calls – this is the <em>secret sauce</em> you’ll spend
+time tuning. Some parts will be different from API call to API call, based on
+the current context. Those are parameters to the template.</p>
+
+<p>In most cases though, you will end up with multiple useful prompt templates. How
+can you find the right one to pick?</p>
+
+<h2 id="prompt-selection">Prompt selection</h2>
+
+<p>Selecting the right prompt for the job can seem complicated, but we have an easy
+solution: we can rely on the large language model to identify which prompt to
+pick! Figure 3.2 shows how this will work.</p>
+
+<p><img src="images/03/figure2.png" alt="Figure 3.2"></p>
+
+<p><em>Figure 3.2: Prompt selection.</em></p>
+
+<p>The 3 steps of prompt selection are:</p>
+
+<ol>
+<li>We start with a user ask. We use a selection prompt template in which we put
+the user ask to end up with a selection prompt. We send this to the large
+language model.</li>
+<li>We get back a selected prompt and input for that prompt. These are produced
+by the model based on the user ask.</li>
+<li>We then use the prompt template selected by the large language model and put
+the selected input into it to come up with the final prompt which we’ll send to
+the model to accomplish the task.</li>
+</ol>
+
+<p>For example, let’s say we have 2 tuned prompts: a lawyer prompt and a writer
+prompt. The lawyer prompt we saw in the previous section (listing 3.15), taking
+an <code>action</code> and a <code>document</code> and acting as a lawyer. This is great for drafting
+and NDA, but not as good for creative writing. Our writer prompt is captured in
+listing 3.18, which we’ll save as <code>writer_chat.json</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are a talented writer.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{action}}: {{document}}&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 3.18: Writer prompt template for chat completion.</em></p>
+
+<p>For simplicity’s sake, we’re also using <code>action</code> and <code>document</code> parameters in
+this case (and our examples aren’t highly-tuned prompts, but that doesn’t matter
+– here we’re focusing on the prompt selection mechanism rather than the prompts
+themselves).</p>
+
+<p>Let’s say instead of an NDA draft, we want a haiku. Listing 3.19 uses the writer
+prompt for this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;writer_chat.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="s1">&#39;compose&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="s1">&#39;a haiku about large language models&#39;</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.19: Using the writer chat completion prompt template.</em></p>
+
+<p>When I ran this code, I got the following response:</p>
+
+<blockquote>
+<p>Giant language minds</p>
+
+<p>Transforming words and culture</p>
+
+<p>Limitless power</p>
+</blockquote>
+
+<p>With the two prompt templates ready, let’s now implement the selection
+mechanism. We will add another prompt, which we will use to pick the best prompt
+between our lawyer and writer prompts for the user ask.</p>
+
+<p>Listing 3.20 shows the prompt selection prompt, which we’ll save as
+<code>selection_chat.json.</code></p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are an AI assistant. You will identify the best way to assistant the user, as a lawyer or as a writer, and also identify the action and document the user wants help with. Your reply will be just a JSON object containing only the properties as, ask, and document.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I need an NDA between two parties&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{\&quot;as\&quot;: \&quot;lawyer\&quot;, \&quot;action\&quot;: \&quot;draft\&quot;, \&quot;document\&quot;: \&quot;an NDA between two parties.\&quot;}&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I&#39;d like a haiku about large language models&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{\&quot;as\&quot;: \&quot;writer\&quot;, \&quot;action\&quot;: \&quot;compose\&quot;, \&quot;document\&quot;: \&quot;a haiku about large language models.\&quot;}&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{ask}}&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 3.20: Prompt selection prompt template for chat completion.</em></p>
+
+<p>We’re using a <code>temperature</code> of 0, since we want the large language model to do
+its best at identifying the user ask and not get creative (at least not at this
+stage). This prompt is tuned to ensure, as much as possible, the response we get
+is in the format we want, so we can process it automatically.</p>
+
+<p>We are also using a couple of example asks and responses in the prompt. This is
+called <em>few-shot learning</em>, which we’ll cover in depth in chapter 4. At a
+high-level, we are providing examples, so the large language model understands
+the pattern we want for our responses. In our case, we’re actually looking for a
+JSON object with the properties <code>as</code> (can be <code>lawyer</code> or <code>writer</code>), <code>action</code>,
+and <code>document</code>. We described the format in the first <code>system</code> message, but
+showing a couple of examples helps.</p>
+
+<p>Let’s take this for a spin: we’ll see what this prompt says about a couple of
+asks, as shown in listing 3.21.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">selection</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;selection_chat.json&#39;</span><span class="p">)</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">selection</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;ask&#39;</span><span class="p">:</span> <span class="s1">&#39;I need an open-source license document&#39;</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">selection</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;ask&#39;</span><span class="p">:</span> <span class="s1">&#39;I need a funny skit&#39;</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.21: Using the prompt selection prompt template for chat completion.</em></p>
+
+<p>Running this code should output something like listing 3.22.</p>
+<div class="highlight"><pre><span></span>{&quot;as&quot;: &quot;lawyer&quot;, &quot;action&quot;: &quot;draft&quot;, &quot;document&quot;: &quot;an open-source license document.&quot;}
+{&quot;as&quot;: &quot;writer&quot;, &quot;action&quot;: &quot;write&quot;, &quot;document&quot;: &quot;a funny skit.&quot;}
+</pre></div>
+
+<p><em>Listing 3.22: Selection prompt response.</em></p>
+
+<p>In the first case, we get back, as expected, <em>lawyer</em>, with the <code>action</code> <em>draft</em>
+and the <code>document</code> <em>an open-source license document</em>. In the second case,
+<em>writer</em>, with <em>write</em> and <em>funny skit</em>.</p>
+
+<p>We are leveraging the large language model to figure out what the user intent
+is. In general, this mechanism of prompt selection works very well since
+understanding user intent is a natural language processing task, a task at which
+large language models excel.</p>
+
+<p>Let’s put everything together now, and write a small program that takes some
+user input, identifies which prompt to use (using <code>selection_chat.json</code>), then
+invoke the identified prompt. Listing 3.23 shows the end-to-end.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">selection</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;selection_chat.json&#39;</span><span class="p">)</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">ask</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;ask: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ask</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">selection</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span><span class="s1">&#39;ask&#39;</span><span class="p">:</span> <span class="n">ask</span><span class="p">})</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="n">selection</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+    <span class="n">response</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">selection</span><span class="p">[</span><span class="s1">&#39;as&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_chat.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span>
+        <span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="n">selection</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="n">selection</span><span class="p">[</span><span class="s1">&#39;document&#39;</span><span class="p">]})</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.23: Interactive ask with prompt selection.</em></p>
+
+<p>We now have an interactive session where the user types in an <code>ask</code>. We quit if
+this is <code>exit</code>, otherwise we invoke our selection prompt. For debugging
+purposes, we print the content of this first response. Assuming the response is,
+as requested, valid JSON with the properties we require, we use the
+<code>json.loads()</code> function to parse the JSON string into an object.</p>
+
+<p>We then load the prompt we’ll use to accomplish the user ask. We use
+<code>selection[&#39;as&#39;]</code> prepended to <code>&#39;_chat.json&#39;</code>, to load the appropriate template
+prompt. For example, if our JSON object has <code>&quot;as&quot;: &quot;lawyer&quot;</code>, the string becomes
+<code>&#39;lawyer_chat.json&#39;</code>.</p>
+
+<p>We also pass in the two parameters, <code>action</code> and <code>document</code>, from the JSON
+object. This is done for clarity, as we could’ve used keyword arguments here and
+simply pass <code>**selection</code>.</p>
+
+<p>We then print the response we get back. You can run this code and play with it,
+trying different asks. This implements the system we described in figure 2. This
+concrete implementation is shown in figure 3.3.</p>
+
+<p><img src="images/03/figure3.png" alt="Figure 3.3"></p>
+
+<p><em>Figure 3.3: Prompt selection for lawyer and writer prompt templates.</em></p>
+
+<ol>
+<li>We replaced the generic “user input” with an actual ask, “I need a funny
+skit”.</li>
+<li>Using the selection prompt will give us back a JSON object containing the
+template we should use (<code>writer</code> in this case) and the parameters we need to
+provide to the template.</li>
+</ol>
+
+<p>Until now, we only saw simple examples – sending some prompt and printing the reply. This is the first time when we stepped up our game and ran a 2-step process:</p>
+
+<ol>
+<li>We first identify user intent and select the best prompt for the task.</li>
+<li>We use the selected prompt to accomplish the task.</li>
+</ol>
+
+<p>We just built a pipeline that includes a couple of prompts! This is also known
+as <em>prompt chaining</em>.</p>
+
+<h2 id="prompt-chaining">Prompt chaining</h2>
+
+<p>For any but the simplest tasks, it’s unlikely we can accomplish them through a
+single prompt. We need to facilitate a back and forth between the user and the
+large language model.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: <em>Prompt chaining</em> refers to the process of generating a
+sequence of prompts that build upon each other to achieve a specific task or
+goal.</p>
+</blockquote>
+
+<p>Prompt chaining involves using the output of one prompt as the input to the next
+prompt, gradually refining the input until we achieve the desired output.</p>
+
+<p>The goal of prompt chaining is to improve the accuracy and relevance of the
+model&#39;s output by providing more context and guidance for the model to work
+with. We just saw an example of this in the previous section, where we first
+identify user intent, which persona (lawyer or writer) is best suited to help
+the user, then picked the follow-up prompt.</p>
+
+<p>The term “prompt chaining” is pretty broad: in some cases, you will see this
+used when covering the simpler scenario of maintaining chat history and sending
+it to the large language model on each call.</p>
+
+<h3>Maintaining context</h3>
+
+<p>We saw a simple command line chat in chapter 2, listing 2.8. Let’s revisit
+command line chat here, focusing on the history part. First, we’ll create an
+interactive chat using our new <code>ChatTemplate</code>, but without maintaining any
+history between subsequent calls. Listing 3.24 shows this initial
+implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;{{prompt}}&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span><span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.24: Command line chat without history.</em></p>
+
+<p>Here we don’t load the template from a file, rather we create it from a
+dictionary. We only set the <code>messages</code>, the first one being the system manage
+telling the AI who to act like, and the second being the user prompt, which is a
+parameter we replace at runtime with the input user is typing.</p>
+
+<p>This works, and we can get the model to answer your questions, but we might
+wrongly assume it “sees” the same conversation as we do. For example, we can ask
+“How to iterate over the files in a directory using the shell?”. This should
+give us back a quite detailed reply on how to do this in a Unix-like shell,
+including a small code sample:</p>
+
+<blockquote>
+<p>To iterate over the files in a directory using the shell, you can use a combination of the <code>for</code> loop and the <code>ls</code> command. Here is an example command:</p>
+<div class="highlight"><pre><span></span><span class="k">for</span><span class="w"> </span>file<span class="w"> </span><span class="k">in</span><span class="w"> </span>/path/to/directory/*<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="nv">$file</span>
+<span class="k">done</span>
+</pre></div>
+
+<p>This will loop through each file in the directory specified by
+<code>/path/to/directory/</code>, and print the file name to the console using the <code>echo</code>
+command. You can replace <code>echo</code> with any other command you wish to run on each
+file.</p>
+</blockquote>
+
+<p>But say we’re on a Windows PC, and would actually like to learn how to do this
+in PowerShell. If our next prompt is “How do I do this in PowerShell?”, the
+response we get is:</p>
+
+<blockquote>
+<p>I&#39;m happy to help. What exactly do you want to do in PowerShell? Whether it&#39;s
+a specific task or a general question about the language, feel free to ask and
+I&#39;ll do my best to assist you.</p>
+</blockquote>
+
+<p>Obviously, the large language model doesn’t know what “this” refers to in this
+context, since it doesn’t remember the first question we asked.</p>
+
+<p>Let’s update our code to maintain a history of the chat. Listing 3.25 shows
+this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 3.25: Command line chat with history.</em></p>
+
+<p>In this updated sample, we keep a history of the chat in the <code>messages</code> list. We
+append each user prompt as a new item, then we also append the response we get.
+Now if we ask the same questions, “How to iterate over the files in a directory
+using the shell?”, then “How do I do this in PowerShell?”, the second question
+yields us this reply:</p>
+
+<blockquote>
+<p>In PowerShell, you can also use a <code>foreach</code> loop to iterate over the files in
+a directory. Here&#39;s an example:</p>
+<div class="highlight"><pre><span></span><span class="k">foreach</span> <span class="p">(</span><span class="nv">$file</span> <span class="k">in</span> <span class="nb">Get-ChildItem</span> <span class="n">-Path</span> <span class="s1">&#39;C:\path\to\directory&#39;</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c"># Do something with $file</span>
+    <span class="nb">Write-Host</span> <span class="nv">$file</span>
+<span class="p">}</span>
+</pre></div>
+
+<p>In this example, <code>Get-ChildItem</code> command lists all the files in
+<code>C:\path\to\directory</code>, and then the <code>foreach</code> statement loops through the files
+one by one, storing each file in the <code>$file</code> variable. You can replace
+<code>Get-ChildItem</code> with any PowerShell cmdlet that generates a list of files (e.g.
+<code>Get-Content</code>, <code>Select-String</code>, etc.).</p>
+</blockquote>
+
+<p>The large language model now understands what “this” refers to, since on each
+chat prompt we pass back the whole conversation.</p>
+
+<p>In this example, <em>prompt chaining</em> refers to maintaining the context of the chat
+across multiple prompts, so the large language model can use it when generating
+a reply.</p>
+
+<p>Figure 3.4 shows prompt chaining when using chat history.</p>
+
+<p><img src="images/03/figure4.png" alt="Figure 3.4"></p>
+
+<p><em>Figure 3.4: Prompt chaining when using chat history.</em></p>
+
+<p>This is a simple loop consisting of:</p>
+
+<ol>
+<li>Use provides some input.</li>
+<li>We combine this with the chat history to come up with a prompt which we send
+to the large language model.</li>
+<li>We get a response back. We update the history, so it contains the latest
+prompt and response, then we go back to step 1.</li>
+</ol>
+
+<p>To recap, when we used prompt selection, we chained prompts by using the first
+prompt to determine what the second prompt will be. In this example, we chained
+prompts by maintaining a history and making it available to the large language
+model on each call. The scenarios are quite different, but they are both
+examples of prompt chaining.</p>
+
+<h3>Implementing a workflow</h3>
+
+<p>Let’s look at a more complex scenario that implements a short workflow, which
+includes both maintaining context across prompts and prompt selection. We’ll
+implement a chat bot that handles coffee shop orders. Our workflow will have 3
+steps: get the order, confirm the order, get contact information.</p>
+
+<p>On step 1, we will get the order from the user. This can happen over multiple
+chat interactions. We’ll have to maintain a history of the chat and continue the
+conversation until we have the full order. Then we move to step 2.</p>
+
+<p>In step 2, we confirm the order with the user. If they would like to change
+anything, we go back to step 1. Once confirmed, we go to step 3.</p>
+
+<p>In step 3, we ask for a phone number.</p>
+
+<p>Notice this example requires both chat history and a prompt selection mechanism.
+Figure 3.5 shows the high-level workflow.</p>
+
+<p><img src="images/03/figure5.png" alt="Figure 3.5"></p>
+
+<p><em>Figure 3.5: 3-step workflow.</em></p>
+
+<p>We will implement this with 2 prompts. The first prompt will handle the order
+interaction and confirmation, while the second prompt will handle getting the
+phone number.</p>
+
+<p>Let’s look at the prompts first. Listing 3.26 shows the prompt for steps 1 and
+2, saved as <code>order.json</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are taking orders for a coffee shop. The beverage items on the menu are: drip coffee, espresso, americano, tea (green or herbal). They come in small, medium, and large sizes. The food items are: croissant (plain or butter), muffin (blueberry or cheese). Identify what the customer wants to order and ask for clarifications when needed. You must get enough details for a coffee shop employee to be able to fulfil the order. For example, an order cannot be fulfilled without knowing the beverage size, or tea flavor, or type of croissant, or type of muffin. You must double check the order with the customer. As soon as the customer confirms the order, you will reply with the word ORDER followed by the order details then by the word DONE. For example: &#39;ORDER a small herbal tea DONE&#39;.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Hi! What can I get for you today?&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 3.26: Order and confirmation prompt template.</em></p>
+
+<p>Using this prompt, we would continue the chat until we see <code>ORDER</code> and <code>DONE</code> in
+the response. Then we should be able to extract the actual order from between
+these words.</p>
+
+<p>Note the prompt asks the large language model to double check the order. Using
+this prompt combined with our chat with history, the model should continue the
+conversation until it has enough details for the order (step 1), confirm the
+order with the customer (step 2), then, if the order is confirmed, send a
+specially formatted reply which we can interpret to stop this chat and switch to
+the next prompt for getting the phone number. The second prompt appears in
+listing 3.27 (saved as <code>phone.json</code>).</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are getting a customer phone number for an order they just placed. Once you have it, respond with PHONE, followed by the number, followed by DONE. For example &#39;PHONE 555-000-1234 DONE&#39;.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Can I please have your phone number?&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 3.27: Phone number prompt template.</em></p>
+
+<p>This simpler prompt should keep the conversation going until a phone number is
+provided (step 3).</p>
+
+<p>Now let’s stich it all together. Listing 3.28 implements the workflow.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">template_file</span><span class="p">,</span> <span class="n">pattern</span><span class="p">):</span>
+    <span class="n">chat_template</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">template_file</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">chat_template</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">&#39;content&#39;</span><span class="p">])</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;Customer: &#39;</span><span class="p">)</span>
+        <span class="n">chat_template</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+
+        <span class="n">message</span> <span class="o">=</span> <span class="n">chat_template</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+        <span class="k">if</span> <span class="s1">&#39;DONE&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> 
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="n">chat_template</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+
+<span class="n">order</span> <span class="o">=</span> <span class="n">step</span><span class="p">(</span><span class="s1">&#39;order.json&#39;</span><span class="p">,</span> <span class="sa">r</span><span class="s1">&#39;ORDER(.*)DONE&#39;</span><span class="p">)</span>
+<span class="n">phone</span> <span class="o">=</span> <span class="n">step</span><span class="p">(</span><span class="s1">&#39;phone.json&#39;</span><span class="p">,</span> <span class="sa">r</span><span class="s1">&#39;PHONE(.*)DONE&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">phone</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 3.28: Coffee ordering workflow.</em></p>
+
+<p>We implement a <code>step()</code> function which takes as arguments a prompt template file
+and a regular expression. We load the template, output the last message from the
+template. In our two templates, these would be “Hi! What can I get for you
+today?” and “Can I please have your phone number?”</p>
+
+<p>We then start the chat loop, waiting for input from the customer. We continue
+the chat, adding both the customer input and the large language model response
+to the chat history, until the response contains the word <code>DONE</code>.</p>
+
+<p>Once we see <code>DONE</code>, we search for the provided regular expression and return the
+matching string. This lets us extract the order, captured between <code>ORDER</code> and
+<code>DONE</code> (<code>r&#39;ORDER(.*)DONE&#39;</code>) and the phone number, captured between <code>PHONE</code> and
+<code>DONE</code> (<code>r&#39;PHONE(.*)DONE&#39;</code>).</p>
+
+<p>We invoke this <code>step()</code> function for the two prompts and the corresponding
+regular expressions. Finally, we print the extracted order and phone number.</p>
+
+<p>A conversation might look like this:</p>
+
+<blockquote>
+<p>Hi! What can I get for you today?</p>
+
+<p>Customer: An americano please</p>
+
+<p>Sure thing! What size would you like your americano? We have small, medium,
+and large.</p>
+
+<p>Customer: Medium</p>
+
+<p>Great! Anything else for you today? We have drip coffee, espresso, tea (green
+or herbal), croissants (plain or butter), and muffins (blueberry or cheese).</p>
+
+<p>Customer: That&#39;s it</p>
+
+<p>Alright, so just to confirm, you would like a medium americano. Is that
+correct?</p>
+
+<p>Customer: Wait, I&#39;d also like a butter croissant</p>
+
+<p>Sure thing! So you would like a medium americano and a butter croissant. Is
+that correct?</p>
+
+<p>Customer: Yes</p>
+
+<p>Can I please have your phone number?</p>
+
+<p>Customer: 555-000-1234</p>
+
+<p>a medium americano and a butter croissant</p>
+
+<p>555-000-1234</p>
+</blockquote>
+
+<p>In the example above, the model does as instructed in the prompt template and
+confirms the order (step 2 of our workflow). If the customer changes their mind
+and wants to add something to the order, the conversation continues. Once the
+order is confirmed, we go to step 3 and start the phone number conversation.</p>
+
+<p>The final <code>print()</code> statements prove the right information was extracted, which
+we could pick up and pass on to some other subsystem.</p>
+
+<p>Unlike our first prompt selection example, where we got the large language model
+to output formatted JSON, in this case we used a couple of “special” words to
+allow us to post-process the response. Either approach works. In this case, JSON
+output would’ve made the prompts a bit longer and our code that figures out when
+to stop a bit more complicated than what we’re doing now (checking for the
+substring <code>DONE</code>). For more complex output, as we saw during prompt selection,
+JSON is easier to parse.</p>
+
+<p>This was a simple workflow demonstrating prompt chaining with 3 steps and 2
+prompts. We relied both on chat history (for the conversation parts), and on
+prompt selection – our code figures out when to stop running the ordering chat
+and switch to the phone chat. Of course, we can implement more complex workflows
+involving more steps and more complex prompt selection.</p>
+
+<h3>Implementation layers</h3>
+
+<p>An interesting thing to note, and to keep in mind as you work with large
+language models, is that implementation spans both code and natural language
+(prompts).</p>
+
+<p>In our simple workflow example, we combined steps 1 and 2 in a single prompt, so
+our decision logic of whether to go from step 1 to step 2 and from step 2 to
+step 3 or back to 1 was “implemented” mostly through natural language in the
+<code>order.json</code> prompt (plus the code we use to determine when we are switching to
+step 3, that is seeing the substring <code>DONE</code> in the response).</p>
+
+<p>We can move more of the implementation in the prompt, for example have a single
+prompt that instructs the model to get the phone number too once the order is
+confirmed, then return both the order and the phone number in some specific
+format we can pick up. One drawback of pushing more logic in the prompt is that
+we end up with longer prompts where we need to explain more to the large
+language model and rely on it to interpret more complex instructions the way we
+expect.</p>
+
+<p>Alternately, we can move more of the implementation in the code, for example
+have a prompt that gets the order and a separate prompt for the confirmation.
+For example, have the confirmation prompt instruct the model to respond with
+<code>CONFIRMED</code> or <code>NOT CONFIRMED</code>, then we can in the code implement the decision
+logic of whether to go back to step 1 (continue getting the order) or move to
+step 3 (get the phone number). One drawback of pushing more logic in the code is
+ending up having to maintain more lines of code and a more prompts.</p>
+
+<p>On one extreme, we have just one huge prompt. On the other extreme, we have only
+code - that’s what we were doing before large language models were a thing. In
+practice, we need to find the sweet spot between these two extremes. Of course,
+there is no one-size-fits-all to do this. What belongs in code and what belongs
+in prompts depends on the scenario. If it is easy to get the expected responses
+out of the large language model, we use prompts. When we need more deterministic
+behavior, or run into token limits, or want to save costs, we use code.</p>
+
+<p>In this chapter we taught the model, through our prompts, how to return output
+formatted in a very specific way. You probably noticed many of the prompts also
+included examples of how we expected the responses to look like. Even though the
+models are pretrained, turns out they can still “learn” some things. The next
+chapter digs into ways we can teach large language models.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>Prompt tuning is the process of tweaking a prompt that elicits the responses
+we expect from large language models. This yields a refined prompt.</li>
+<li>A good prompt has proper syntax and includes who the model should act like,
+additional context, who the audience is, how the output should look like, how
+to generate the output, and examples.</li>
+<li>Prompt templates allow us to reuse good prompts by parameterizing
+instance-specific parts and keeping the rest of the prompt unchanged.</li>
+<li>Prompt selection means deciding which prompt to pick out of several options to
+best complete a task.</li>
+<li>Prompt chaining is the process of connecting multiple prompts together, either
+through prompts selection, by maintaining a history of previous prompts and
+responses, or both.</li>
+<li>Working with large language models, we have two layers of implementation: one
+in code, one in natural language (in the prompts).</li>
+<li>We can push logic from one layer to another, depending on the specific problem
+we are trying to solve and tradeoffs we need to consider.</li>
+</ul>
+
 <div class="footnotes">
 <hr>
 <ol>
