@@ -19,7 +19,12 @@
   * [API responses](./large-language-models.html#api-responses)
   * [API parameters](./large-language-models.html#api-parameters)
   * [Summary](./large-language-models.html#summary)
-* Chapter 3: Prompt Engineering
+* [Chapter 3: Prompt Engineering](./prompt-engineering.html)
+  * [Prompt design & tuning](./prompt-engineering.html#prompt-design-&-tuning)
+  * [Prompt templates](./prompt-engineering.html#prompt-templates)
+  * [Prompt selection](./prompt-engineering.html#prompt-selection)
+  * [Prompt chaining](./prompt-engineering.html#prompt-chaining)
+  * [Summary](./prompt-engineering.html#summary)
 * Chapter 4: Learning and Tuning
 * Chapter 5: Memory and Embeddings
 * Chapter 6: Integrating With External Systems
