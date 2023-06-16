@@ -18,12 +18,9 @@ shutil.rmtree('site/images', ignore_errors=True)
 chapter_titles = {
     'index': 'Front Cover',
     'toc': 'Table of Contents',
-    'preface': 'Preface',
     '01': 'A New Paradigm',
     '02': 'Large Language Models',
     '03': 'Prompt Engineering',
-    '04': 'Learning and Tuning',
-    '05': 'Memory and Embeddings',
 }
 
 # Chapter heading mappings
@@ -34,12 +31,10 @@ chapter_headings = {
     '01': 'Chapter 1: %s',
     '02': 'Chapter 2: %s',
     '03': 'Chapter 3: %s',
-    '04': 'Chapter 4: %s',
-    '05': 'Chapter 5: %s',
 }
 
 # Chapter order
-chapters = ['index', 'toc', 'preface', '01', '02', '03']
+chapters = ['index', 'toc', '01', '02', '03']
 
 # Get chapter outpath
 def get_chapter_outpath(index):
