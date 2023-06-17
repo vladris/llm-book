@@ -116,6 +116,7 @@ a {
   font-weight: bold;
   text-decoration: none;
   color: #dd0000;
+  overflow-wrap: break-word;
 }
 
 blockquote {
