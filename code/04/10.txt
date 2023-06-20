@@ -1,0 +1,9 @@
+You are in a room with a table and a door.
+The door is locked.
+You have a sandwich.
+> What is on the table?
+You see a key lying on the table.
+> I use the key to open the door
+You use the key to unlock the door and open it. You find yourself in a dark hallway. There are doors on either side of the hallway and a staircase leading up.
+> I eat the sandwich
+You eat the sandwich and feel slightly less hungry.

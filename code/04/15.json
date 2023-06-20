@@ -1,0 +1,8 @@
+{
+    "temperature": 0,
+    "messages": [
+        { "role": "user", "content": "Here is some information about the 2023 Pod Racing season: Race 1 was the Tatooine Grand Prix, won by Senn Kava. Provide 2 prompts and completions based on this data in JSONL format." },
+        { "role": "assistant", "content": "{\"prompt\": \"What was the name of the first race in the 2023 Pod Racing season?\", \"completion\": \"The Tatooine Grand Prix.\"}\n{\"prompt\": \"Who won the Tatooine Grand Prix?\", \"completion\": \"Senn Kava.\"}" },
+        { "role": "user", "content": "Here is some information about the 2023 Pod Racing season: {{info}}. Provide {{n}} prompts and completions based on this data in JSONL format." }
+    ]
+}

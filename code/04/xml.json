@@ -1,0 +1,7 @@
+{
+    "messages": [
+        { "role": "user", "content": "Give me some facts about Saturn" },
+        { "role": "assistant", "content": "<FACTS entity=\"Saturn\"><FACT>Named after the Roman god of agriculture and harvest</FACT><FACT>At least 82 known moons</FACT></FACTS>" },
+        { "role": "user", "content": "Give me some facts about {{entity}}"}
+    ]
+}

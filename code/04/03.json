@@ -1,0 +1,5 @@
+{
+    "messages": [
+        { "role": "user", "content": "Here is some sample text: {{sample}} Rewrite the following text in the same style as the sample: {{text}}" }
+    ]
+}

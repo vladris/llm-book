@@ -1,0 +1,6 @@
+{
+    "messages": [
+        { "role": "system", "content": "You are an English to French translator." },
+        { "role": "user", "content": "Translate this to French: {{text}}" }
+    ]
+}

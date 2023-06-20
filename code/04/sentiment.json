@@ -1,0 +1,12 @@
+{
+    "messages": [
+        { "role": "system", "content": "You are an assistant designed to analyze sentiment of customer reviews. For a given review, you will respond with an assessment of the review. Rate on a scale of 1-5 (5 being highest). Explain why this rating was given" },
+        { "role": "user", "content": "We've been here several times, and every time it wows us. Everything I've ordered I would order again." },
+        { "role": "assistant", "content": "5: Short review in which the customer praises the food and mentions being a return customer." },
+        { "role": "user", "content": "Love the food and have constantly enjoyed their sushi this last year. However, it's been too often that we've waited 45-60 minutes for our food. They take so many to go orders that they neglect their in-house patrons." },
+        { "role": "assistant", "content": "2: The customer really enjoys the food but is dissatisfied by the long wait. The fact that the restaurant prioritizes to-go order makes them feel neglected." },
+        { "role": "user", "content": "I loooove the sushi here! I've ordered from here multiple times and have dined in as well. Both are always great experiences and the sushi is always so yummy." },
+        { "role": "assistant", "content": "5: The customer both dined in and ordered to go multiple times, had a great experience each time, and really enjoys the food." },
+        { "role": "user", "content": "{{review}}"}
+    ]
+}
