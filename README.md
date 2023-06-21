@@ -1,6 +1,8 @@
-# llm-book
+# 📕 Large Language Models at Work
 
-Repository for my in-development LLM book.
+Repository for my in-development book, *Large Language Models at Work: Enhancing Software Systems with Language Models*.
+
+Online at <https://vladris.com/llm-book>.
 
 * `code` contains all the code samples.
 * `site` contains the assets for the website.
