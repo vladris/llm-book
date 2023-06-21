@@ -1,0 +1,3 @@
+Job complete! Status: succeeded 🎉
+Try out your fine-tuned model:
+openai api completions.create -m davinci:ft-personal-2023-06-19-17-42-56 -p <YOUR_PROMPT>

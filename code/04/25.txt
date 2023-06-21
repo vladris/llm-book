@@ -1,0 +1,6 @@
+user: Which pod does Remy Thal pilot?
+ Crimson Fang.
+user: Who pilots The Razor Blade?
+ Kael Voss.
+user: What happened to Senn Kava during the Genosis Challange?
+ An unexpected power surge caused the pod's stabilization system to fail.
