@@ -1,0 +1,9 @@
+{
+    "temperature": 0,
+    "messages": [
+        { "role": "system", "content": "You are an AI assistant producing JSON questions and answers. If the question is about a specific race, make sure to include the name of the name of the race in the question." },
+        { "role": "user", "content": "During the Tatooine Grand Prix Pod Racing race, Senn Kava's Thunderbolt pod launched with an extraordinary burst of speed and Senn Kava took first place." },
+        { "role": "assistant", "content": "{\"prompt\": \"Who won the Tatooine Grand Prix race?\", \"completion\": \"Senn Kava.\"}\n{\"prompt\":\"Which pod launched with an extraordinary speed during the Tatooine Grand Prix race?\", \"completion\": \"Senn Kava's Thunderbolt.\"}\n" },
+        { "role": "user", "content": "Here is some information about the 2023 Pod Racing season: {{info}}. Provide {{n}} prompts and completions based on this data in JSONL format." }
+    ]
+}
