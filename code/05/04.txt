@@ -1,0 +1,10 @@
+user: Say "Hello world" in Python
+assistant: Hello world! Here's the code to print it in Python:
+```
+print("Hello world")
+```
+user: Now do it in Ruby
+assistant: Sure! Here's how to print "Hello world" in Ruby:
+```
+puts "Hello world"
+```

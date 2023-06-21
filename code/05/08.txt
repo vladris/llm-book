@@ -1,0 +1,2 @@
+user: Who is the author of The Skeleton Songs?
+assistant: The author of The Skeleton Songs is Arabella Dusk, a possibly pseudonymous poetess.
