@@ -1,5 +1,9 @@
 @import url(http://fonts.googleapis.com/css?family=PT+Sans:400,700,400italic,700italic);
-@import url(http://fonts.googleapis.com/css?family=Source+Code+Pro);
+
+@font-face {
+  font-family: 'Cascadia Code';
+  src: url('./fonts/CascadiaCode.ttf') format('truetype');
+}
 
 .highlight {
   overflow: scroll;
@@ -163,7 +167,7 @@ pre {
 }
 
 code, pre {
-  font-family: 'Source Code Pro', Lucida Console, Courier, monospace;
+  font-family: 'Cascadia Code', Lucida Console, Courier, monospace;
   font-size: .8em;
 }
 
