@@ -78,3 +78,13 @@ def count_tokens(messages):
     # Every reply is primed with <|start|>assistant<|message|>
     num_tokens += 3
     return num_tokens
+
+
+def get_embedding(text):
+    return openai.Embedding.create(
+        input=[text.replace('\n', ' ')],
+        model='text-embedding-ada-002')['data'][0]['embedding']
+
+
+def cosine_distance(a, b):
+    return 1 - sum([a_i * b_i for a_i, b_i in zip(a, b)]) / (sum([a_i ** 2 for a_i in a]) ** 0.5 * sum([b_i ** 2 for b_i in b]) ** 0.5)
