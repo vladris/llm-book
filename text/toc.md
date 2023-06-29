@@ -23,7 +23,12 @@
   * [Prompt selection](./prompt-engineering.html#prompt-selection)
   * [Prompt chaining](./prompt-engineering.html#prompt-chaining)
   * [Summary](./prompt-engineering.html#summary)
-* Chapter 4: Learning and Tuning
+* [Chapter 4: Learning and Tuning](./learning-and-tuning.html)
+  * [Zero-shot learning](./learning-and-tuning.html#zero-shot-learning)
+  * [One-shot learning](./learning-and-tuning.html#one-shot-learning)
+  * [Few-shot learning](./learning-and-tuning.html#few-shot-learning)
+  * [Fine-tuning](./learning-and-tuning.html#fine-tuning)
+  * [Summary](./learning-and-tuning.html#summary)
 * Chapter 5: Memory and Embeddings
 * Chapter 6: Integrating With External Systems
 * Chapter 7: Planning
