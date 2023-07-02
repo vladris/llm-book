@@ -1,0 +1,8 @@
+{
+  "finish_reason": "stop",
+  "index": 0,
+  "message": {
+    "content": "The weather today in Seattle is sunny with a temperature of 75 degrees. There is a 10% chance of rain.",
+    "role": "assistant"
+  }
+}

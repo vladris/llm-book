@@ -1,0 +1,4 @@
+> Schedule lunch with Jane Doe for Monday at noon at Tipsy Cow
+* Getting emails for ['Jane Doe']
+* Meeting 'Lunch' scheduled for Monday at 12:00 PM with ['jane.doe@example.com']
+I have successfully scheduled a lunch with Jane Doe for Monday at noon at Tipsy Cow.
