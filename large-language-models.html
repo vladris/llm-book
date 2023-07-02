@@ -737,9 +737,10 @@ provided by OpenAI (<a href="https://platform.openai.com/tokenizer">https://plat
 </ul>
 
 <p>The main use-cases for programmatically counting tokens are figuring out whether
-a prompt fits within the model limits and to estimate the cost of a call. Since
-using these models can get expensive<sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>, let’s see how we can get the most out
-of an API call.</p>
+a prompt fits within the model limits and to estimate the cost of a call. In
+chapter 5, where we discuss memory, we’ll spend more time talking about how to
+handle this context size limit. Since using these models can get expensive<sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>,
+let’s see how we can get the most out of an API call.</p>
 
 <h2 id="api-responses">API responses</h2>
 
@@ -804,7 +805,8 @@ the <code>max_tokens</code> parameters as we’ll see in the next section). More
 <code>function_call</code> is another possible response, in which the model requests to
 call a function we made available to it (more about this in chapter 6). The
 other possible value is <code>content_filter</code> – when OpenAI’s content filters flag
-the content and abort processing.</li>
+the content and abort processing. Content filtering happens when the prompt
+contains abusive or otherwise inappropriate content and OpenAI rejects it.</li>
 <li><code>index</code>: The index of the choice in the array, 0-based. We have a single
 choice in this response, so the value is 0.</li>
 <li><code>logprobs</code>: For advanced uses, we can ask the model to return the log
@@ -937,7 +939,8 @@ the <code>messages</code> parameter being populated with messages with <code>rol
 parts (the <em>role</em> issuing the message, which can be <code>system</code>, <code>user</code>, or
 <code>assistant</code> and the <em>content</em> of the message). The API supports an additional,
 optional parameter <code>name</code>. This represents the name of the author of the
-message.</p>
+message (for example your name if you are the one chatting with the large
+language model).</p>
 
 <p>The key parameters we’ll cover are:</p>
 
