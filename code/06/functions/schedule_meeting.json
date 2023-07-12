@@ -1,0 +1,17 @@
+{
+    "name": "schedule_meeting",
+    "description": "Sends a meeting invitation with the given subject to the given recipient emails at the given time",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "subject": { "type": "string" },
+            "recipients": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "time": { "type": "string" }
+        }
+    }
+}

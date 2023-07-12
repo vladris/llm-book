@@ -1,0 +1,15 @@
+{
+    "name": "get_emails",
+    "description": "Get the email addresses of a set of users given their names",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "names": {
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
