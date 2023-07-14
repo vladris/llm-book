@@ -1,0 +1,12 @@
+{
+    "name": "set_reminder",
+    "description": "Sets a reminder based on location",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "reminder": {"type": "string"},
+            "location": {"type": "string"}
+        }
+    }
+}
+
