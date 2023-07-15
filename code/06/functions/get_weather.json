@@ -1,0 +1,8 @@
+{
+    "name": "get_weather",
+    "description": "Gets the weather given a city name",
+    "parameters": {
+        "type": "object",
+        "properties": {"city": {"type": "string"}}
+    }
+}

@@ -29,7 +29,13 @@
   * [Few-shot learning](./learning-and-tuning.html#few-shot-learning)
   * [Fine-tuning](./learning-and-tuning.html#fine-tuning)
   * [Summary](./learning-and-tuning.html#summary)
-* Chapter 5: Memory and Embeddings
+* [Chapter 5: Memory and Embeddings](./memory-and-embeddings.html)
+  * [A simple memory](./memory-and-embeddings.html#a-simple-memory)
+  * [Key-value memory](./memory-and-embeddings.html#key-value-memory)
+  * [Embeddings](./memory-and-embeddings.html#embeddings)
+  * [Vector databases](./memory-and-embeddings.html#vector-databases)
+  * [A novel approach](./memory-and-embeddings.html#a-novel-approach)
+  * [Summary](./memory-and-embeddings.html#summary)
 * Chapter 6: Integrating With External Systems
 * Chapter 7: Planning
 * Chapter 8: Safety and Security

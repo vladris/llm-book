@@ -1,0 +1,14 @@
+{
+    "temperature": 0,
+    "messages": [
+        { "role": "system", "content": "You are an AI personal assistant. You can call external functions to accomplish tasks or get more information. To call an external function, your respond is only JSON. The return value of the function will be made available to you. Only call the functions described next:" },
+        { "role": "system", "content": "Function: get_emails - Gets the email addresses of a set of users given their names. Call this if you need to get email addresses when you know names. Arguments: names - array of names as string; returns name to email mapping." },
+        { "role": "system", "content": "Function: schedule_meeting - Sends a meeting invitation with the given subject to the given recipient emails at the given time. Arguments: subject - meeting subject as string, recipients - array of emails as string, time - meeting time as string; returns success status." },
+        { "role": "user", "content": "Schedule a meeting with Bill Gates for 3 PM, subject: Discuss LLMs"},
+        { "role": "assistant", "content": "{ \"name\": \"get_emails\", \"args\": { \"names\": [\"Bill Gates\"]}"},
+        { "role": "user", "name": "get_emails", "content": "{ \"Bill Gates\": \"billg@microsoft.com\" }"},
+        { "role": "assistant", "content": "{ \"name\": \"schedule_meeting\", \"args\": { \"subject\": \"Discuss LLMs\", \"recipients\": [\"billg@microsoft.com\"], \"time\": \"3 PM\" }"},
+        { "role": "user", "name": "schedule_meeting", "content": "{ \"success\": true }"},
+        { "role": "assistant", "content": "Meeting scheduled successfully"}
+    ]
+}

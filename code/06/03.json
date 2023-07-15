@@ -1,0 +1,40 @@
+{
+    "temperature": 0,
+    "messages": [
+        { "role": "system", "content": "You are an AI personal assistant" }
+    ],
+    "functions": [
+        {
+            "name": "get_emails",
+            "description": "Get the email addresses of a set of users given their names",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "names": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "name": "schedule_meeting",
+            "description": "Sends a meeting invitation with the given subject to the given recipient emails at the given time",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": { "type": "string" },
+                    "recipients": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "time": { "type": "string" }
+                }
+            }
+        }
+    ]
+}

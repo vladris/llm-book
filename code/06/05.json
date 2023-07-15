@@ -1,0 +1,12 @@
+{
+  "finish_reason": "function_call",
+  "index": 0,
+  "message": {
+    "content": null,
+    "function_call": {
+      "arguments": "{\n  \"city\": \"Seattle\"\n}",
+      "name": "get_weather"
+    },
+    "role": "assistant"
+  }
+}
