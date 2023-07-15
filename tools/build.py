@@ -4,6 +4,8 @@ import shutil
 from baku.markdown import make_markdown_processor
 from baku.templating import render, VerySimpleTemplate
 
+# OOOOOHHHH - I need this for my manager book, been wanting to split into chapters
+# But keeping ToC in sync was PITA
 
 # Clean up the site directory
 print('Cleaning up site directory')
