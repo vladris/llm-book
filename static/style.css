@@ -224,3 +224,12 @@ tr:nth-child(even) {
 tr:nth-child(odd) {
   background-color: #f8fafb;
 }
+
+/* Math - override pygments */
+.mrow .mi, .mrow .mo {
+  color: #222;
+}
+
+div.footnotes {
+  text-align: left;
+}

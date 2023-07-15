@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Memory and Embeddings ~ LLMs at Work</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-NhSC1YmyruXifcj/KFRWoC561YpHpc5Jtzgvbuzx5VozKpWvQ+4nXhPdFgmx8xqexRcpAglTj9sIBWINXa8x5w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="./static/style.css" type="text/css">
+<link rel="stylesheet" href="./static/pygments.css" type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
+</head>
+<body>
+<header>
+  <div class="title"><span>Chapter 5: Memory and Embeddings</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
+  </ul>
+</header>
+<article>
+<h1>Memory and Embeddings</h1>
+
+<p><img src="images/05/cover.png" alt="Memory and Embeddings"></p>
+
+<p>In this chapter:</p>
+
+<ul>
+<li>Implementing simple memories.</li>
+<li>Leveraging embeddings for better recall.</li>
+<li>Using a vector database.</li>
+<li>Exploring alternative memory architectures.</li>
+</ul>
+
+<p>We saw some important limitations of large language models: the fact that they
+don’t maintain any memory between API calls and token limits which make it
+impossible to add large amounts of data in a prompt. The solution to these
+limitations is memory – having some other storage for data and a mechanism to
+retrieve the bits relevant to the current prompt.</p>
+
+<p>We’ll start with a couple of simple memory implementations. First, we’ll look at
+maintaining a chat memory as a list of messages. As we start running into token
+limits, we’ll start popping old messages from the list. This is a very primitive
+solution, which introduces the problem space.</p>
+
+<p>We’ll then implement a slightly smarter key-value memory. Our memory will
+consist of book descriptions keyed by book title. When our prompt mentions a
+book title we know about, we inject the book data into the prompt. We’ll also
+cover limitations of this approach.</p>
+
+<p>Next, we’ll look at a better approach: <em>embeddings</em>. We’ll see what an embedding
+is and how we can produce one. We’ll implement a memory based on embeddings,
+which makes data retrieval much better. We’ll revisit the Pod Racing dataset and
+Q&amp;A scenario. Instead of the fine-tuning we used in chapter 4, we’ll embed the
+dataset and implement Q&amp;A using embeddings. Turns out this yields better results
+than fine-tuning.</p>
+
+<p>To scale to large datasets, we’ll likely need a <em>vector database</em>. We’ll take a
+look at Chroma, an open-source vector database. We’ll redo the Pod Racing Q&amp;A
+using Chroma and learn how we can store and query embeddings. We’ll briefly talk
+about other vector databases which you should consider when building your
+solution.</p>
+
+<p>We’ll wrap up with a quick overview of a novel approach to memory, which expands
+on embeddings with additional parameters like recency and importance. This is an
+interesting area of exploration. But first things first: a very simple memory
+implementation.</p>
+
+<h2 id="a-simple-memory">A simple memory</h2>
+
+<p>We’ll start our discussion on memory by reiterating the need for such a
+mechanism and the limitations of a naïve approach. We saw in chapter 2 that
+large language models do not maintain any memory themselves. At the model layer,
+there is no concept of <em>session</em> or <em>chat</em>. Let’s say we implement a simple chat
+client that doesn’t have any memory whatsoever, like we did in chapter 3
+(listing 3.24). We’ll reproduce it here as listing 5.1.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;{{prompt}}&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span><span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 5.1: Command line chat without history.</em></p>
+
+<p>Note we are looping, sending prompts to the large language model, and printing
+the replies, but we don’t maintain any history of the chat.</p>
+
+<p>If we run this and our first prompt is <em>Say <q>Hello world</q> in Python</em> and our
+second one is <em>Now do it in Ruby</em>, we will get a response similar to listing
+5.2.</p>
+<div class="highlight"><pre><span></span>user: Say &quot;Hello world&quot; in Python
+assistant: Sure, here is how to say &quot;Hello world&quot; in Python:
+
+```
+print(&quot;Hello world&quot;)
+```
+user: Now do it in Ruby
+assistant: Sure I can do that! Here&#39;s a simple Ruby program that can be run in the console:
+
+```
+class ChatProgram
+  def initialize
+    puts &quot;Hello! I&#39;m a chat program. What&#39;s your name?&quot;
+    @name = gets.chomp
+  end
+
+...
+</pre></div>
+
+<p><em>Listing 5.2: Chatting with a large language model without history.</em></p>
+
+<p>I trimmed a lot of the output in listing 5.2 as the response went on for quite a
+while but this should be enough to get the point across. This example simply
+illustrates the fact that models by themselves don’t remember anything between
+prompts, which makes for some very incoherent “chat”. The model did not remember
+our first prompt was <code>Say &quot;Hello world&quot; in Python</code>, so it interpreted <code>Now do it
+in Ruby</code> as a standalone ask, and it tried to guess what we mean by “it”. In
+this case it implemented a chat program.</p>
+
+<p>The solution we saw before, reproduced in listing 5.3, is to maintain a history
+of the prompts and responses, and send it back to the model with each prompt.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 5.3: Chat with history.</em></p>
+
+<p>Unlike listing 5.1, here we append the user message to
+<code>chat.template[&#39;messages&#39;]</code> before sending the request to the large language
+model. We also append the response we get from the model after printing it. With
+each iteration of the loop, we now maintain a history of the conversation which
+we play back with each request.</p>
+
+<p>With this approach, our previous example of saying “Hello world” in different
+languages looks a lot better (listing 5.4).</p>
+<div class="highlight"><pre><span></span>user: Say &quot;Hello world&quot; in Python
+assistant: Hello world! Here&#39;s the code to print it in Python:
+```
+print(&quot;Hello world&quot;)
+```
+user: Now do it in Ruby
+assistant: Sure! Here&#39;s how to print &quot;Hello world&quot; in Ruby:
+```
+puts &quot;Hello world&quot;
+```
+</pre></div>
+
+<p><em>Listing 5.4: Chatting with a large language model with history.</em></p>
+
+<p>Figure 5.1 shows how this works.</p>
+
+<p><img src="images/05/fig1.png" alt="Figure 5.1"></p>
+
+<p><em>Figure 5.1: Maintaining a history of all messages in a chat.</em></p>
+
+<ol>
+<li>We append the latest user input to the list of messages.</li>
+<li>We send the whole list of messages to the large language model.</li>
+<li>We append the response we get from the model to the list of messages.</li>
+</ol>
+
+<p>So far so good – our chat history acts as a very simple memory for the model.
+The reason we have to dedicate a whole chapter to the topic is we can easily run
+into token limits. As the chat conversation continues, our history grows
+unbounded. At some point, it grows large enough that the model is no longer able
+to process it.</p>
+
+<p>You can give this a try if you want to see how it looks like. Here is what
+happens once the prompt becomes too large for the model:</p>
+
+<blockquote>
+<p>openai.error.InvalidRequestError: This model&#39;s maximum context length is 4097
+tokens. However, your messages resulted in 4327 tokens. Please reduce the length
+of the messages.</p>
+</blockquote>
+
+<p>The API throws an exception. This means our chat program as-is won’t work very
+well for any significantly long chat conversation.</p>
+
+<p>Keep in mind this goes beyond chat applications. In chapter 4 we saw how we can
+use few-shot learning to “teach” the model new things. For any complex enough
+scenario, we will have enough data at hand that we won’t be able (and it would
+be highly inefficient) to send all of it to the model with each prompt. Think of
+a scenario like our Pod Racing stats from chapter 4. For a large enough dataset,
+we had to resort to fine-tuning, but also discussed some of the tradeoffs with
+this approach. We said there is an alternative to make large datasets available
+to a large language model through memory. Throughout the rest of this chapter,
+we’ll look at different ways to implement memory.</p>
+
+<p>In chapter 2 we touched on <code>tiktoken</code>, an OpenAI Python library we can use to
+count the number of tokens in a request. Counting tokens becomes relevant as
+we’re looking at scenarios like the chat memory above, where we are likely to
+run into limits. Counting tokens with <code>tiktoken</code> is straight-forward for
+completion model but gets a bit more complex for chat completion models, where
+we have multiple roles and messages. The implementation itself is less
+interesting. Our <code>llm_utils</code> library as <code>count_tokens()</code>, which works for
+counting the tokens in the <code>messages</code> parameter of the current version of
+<code>gpt-3.5-turbo</code> (future iterations of this model might choose a different
+encoding). We’ll be using this function in the next code samples without
+discussing the implementation here (it is covered in Appendix A if you are
+curious).</p>
+
+<p>Note the large language model token limit is a combination of prompt and
+response, so we need our prompt to leave enough tokens for the model response
+too. One idea for the chat scenario is to set some token limit we want our
+prompt to fit into, with enough tokens left for a response, and <em>forget</em> old
+chat items. Figure 5.2 sketches how this would work.</p>
+
+<p><img src="images/05/fig2.png" alt="Figure 5.2"></p>
+
+<p><em>Figure 5.2: Chat history with limit.</em></p>
+
+<ol>
+<li>Same as figure 5.1, we append the user input to the list of messages.</li>
+<li>We now check whether we are within the token limit. If we are not, we remove
+the oldest message. Repeat until we are within the limit.</li>
+<li>Send all of the remaining messages to the large language model.</li>
+<li>Append the response to the list of messages.</li>
+</ol>
+
+<p>Listing 5.5 shows the implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span><span class="p">,</span> <span class="n">count_tokens</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">}]})</span>
+
+<span class="n">TOKEN_LIMIT</span> <span class="o">=</span> <span class="mi">1000</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+    <span class="k">while</span> <span class="n">count_tokens</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="n">TOKEN_LIMIT</span><span class="p">:</span>
+        <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 5.5: Chat with history and token limit.</em></p>
+
+<p>We set a token limit of <code>1000</code> and while our history of the chat (maintained in
+<code>chat.template[&#39;messages&#39;]</code>) has more tokens that the limit, we pop the oldest
+item.</p>
+
+<p>This is a pretty simple “memory” which will never run into token limits. We can
+have a conversation where we reference previous prompts and it will work up to a
+point. As the chat history starts hitting token limits, we start removing items
+from it, so if further down the chat we try to reference something from the very
+beginning, the model will no longer be able to recall that. This might be good
+enough for some scenarios, but we can do much better.</p>
+
+<h2 id="key-value-memory">Key-value memory</h2>
+
+<p>A key-value memory is another pretty simple type of memory, which works well in
+certain scenarios. For example, let’s say we have a database of books and
+information about each book. We can represent these as book title-book
+description key-value pairs. Listing 5.6 shows a small example, though our
+dataset can be arbitrarily large.</p>
+<div class="highlight"><pre><span></span>Travelling at Night
+---
+The annotated dream-journals of Christopher Illopoly, sometimes called &#39;the only
+readable occultist&#39;: literate, entertaining, bewildering. 
+&#39;The Wood lies outside the walls of the Mansus. As any student of Histories
+knows, the Mansus has no walls.&#39;Illopoly describes how he came to make repeated
+visits to a dream-Wood via what he calls silver dreams. &#39;Trying to think your
+way to the Wood,&#39; he explains, &#39;is like thinking your way to being in love. But
+I did find a Secret that helped.&#39;
+
+The Skeleton Songs
+---
+Poems of greedy delight composed by the possibly pseudonymous Arabella Dusk, the
+rumoured heiress-turned-madam-turned-poetess. In Arabella&#39;s introduction, she
+explains that the book was to be illustrated, but that the Suppression Bureau
+would not permit it. She hints that the illustrations still exist somewhere. The
+book is dedicated to &#39;Sir Parsival of the Red Cup&#39;. The Twenty-Six Delightful
+Fruits; the Seven Chastisements; the Nine Gardens; the Four Regrets.
+
+The Locksmith&#39;s Dream
+---
+The first volume of Teresa Galmier&#39;s examination of parallels in the mystic
+dreams of artisans.The parallels in mystic dreams experienced by carpenters,
+masons and other artisans, and what they purport to reveal about the
+architecture of the world. Sometimes mordant, sometimes funny. No-one has ever
+explained why Galmier devoted herself to this quixotic exploration of artisan&#39;s
+dreams. &#39;Time and again we hear of the Wood, which rises from the world&#39;s
+foundation. All trees reach for light. What does the Wood reach for? Is there a
+difference between light and Light? I think the key to dreams of the Wood might
+be one of these - the one that isn&#39;t exactly real.&#39;
+</pre></div>
+
+<p><em>Listing 5.6: Book titles and descriptions.</em><sup id="fnref1"><a href="#fn1" rel="footnote">1</a></sup></p>
+
+<p>We can save this file as <code>books.txt</code>. We can now load this database in a
+dictionary and enhance our chat program so it can answer questions about books.
+Figure 5.3 shows how this would work.</p>
+
+<p><img src="images/05/fig3.png" alt="Figure 5.3"></p>
+
+<p><em>Figure 5.3: Retrieving book description from memory based on question.</em></p>
+
+<p>As we chat with our user, we check whether a book title is mentioned in their
+prompt. If it is, we retrieve the book description from memory and inject it in
+the prompt before sending it over to the large language model. This adds
+additional context to the prompt. We used the term “context” in previous
+chapters but let’s define it here.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: <em>prompt context</em> refers to the input provided to the model to
+guide its response. It includes the user ask and additional information relevant
+for satisfying the ask. The information could be a history of previous
+interactions, additional data, additional instructions, example responses etc.</p>
+</blockquote>
+
+<p>Listing 5.7 shows the implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;books.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n\n</span><span class="s1">&#39;</span><span class="p">)</span>
+
+<span class="n">books</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">book</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
+    <span class="n">title</span><span class="p">,</span> <span class="n">description</span> <span class="o">=</span> <span class="n">book</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">---</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">books</span><span class="p">[</span><span class="n">title</span><span class="p">]</span> <span class="o">=</span> <span class="n">description</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI chat program.&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="k">for</span> <span class="n">book</span> <span class="ow">in</span> <span class="n">books</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">book</span> <span class="ow">in</span> <span class="n">prompt</span><span class="p">:</span>
+            <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span>
+                                              <span class="s1">&#39;Here is a description of &#39;</span> <span class="o">+</span> <span class="n">book</span> <span class="o">+</span> <span class="s1">&#39;: &#39;</span> <span class="o">+</span> <span class="n">books</span><span class="p">[</span><span class="n">book</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;.&#39;</span><span class="p">})</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 5.7: Adding book context to chat.</em></p>
+
+<p>We read <code>book.txt</code> and process it into the <code>books</code> dictionary as
+title-description key-value pairs. In our chat loop we now preprocess the
+prompt, identify the information that will most likely give useful additional
+context to the large language model and update the prompt with this information.</p>
+
+<p>Namely we search for book titles in the user’s <code>prompt</code>. If we find one, we
+inject another message into the chat history before the user prompt. This
+message provides the description of a book as retrieved from our key-value
+memory (the <code>books</code> dictionary).</p>
+
+<p>Listing 5.8 shows a possible dialogue using this implementation.</p>
+<div class="highlight"><pre><span></span>user: Who is the author of The Skeleton Songs?
+assistant: The author of The Skeleton Songs is Arabella Dusk, a possibly
+pseudonymous poetess.
+</pre></div>
+
+<p><em>Listing 5.8: Dialogue with key-value memory.</em></p>
+
+<p>Listing 5.7 shows a small implementation optimized for readability. A few things
+to note here:</p>
+
+<ol>
+<li>If the user mentions the same book in two different prompts, we inject the
+same description twice in the chat. We can extend the code to keep track of
+which descriptions we already provided and avoid duplication. Better yet, we
+can trim the chat history of book descriptions that are not relevant to the
+current user prompt.</li>
+<li>We can mix the simple memory with token limits we looked at in the previous
+section with this implementation. We are again at a point where a long chat
+will exhaust the token limit, but there’s nothing preventing us from trimming
+the history to avoid this.</li>
+<li>We can provide smarter search than exact string matching. For example, we can
+do fuzzy matching to account for typos.</li>
+</ol>
+
+<p>We didn’t do any of the above to keep the code sample easier to read, but all of
+these are valid enhancements which we’d likely do if we were building a robust
+system.</p>
+
+<p>This is the first time where we can easily see how useful additional memory is.
+While our example shows only a few books, in practice we can have as many as we
+want. We have the constraint of <em>one</em> book description having to fit within the
+token limit, but not the total size of <em>all</em> book descriptions.</p>
+
+<h3>Memory</h3>
+
+<p>We’ve seen a couple of memories, so let’s extrapolate and look at the generic
+structure. Figure 5.4 shows a pipeline including memory.</p>
+
+<p><img src="images/05/fig4.png" alt="Figure 5.4"></p>
+
+<p><em>Figure 5.4: Large language model pipeline with memory.</em></p>
+
+<p>We have a large dataset (larger than we can fit in a prompt) – our memory. We
+take some input. Based on the input, we identify which pieces of our large
+dataset apply to the input, and we pull them into the prompt we send to the
+large language model.</p>
+
+<p>In general, since large language models don’t remember data that they haven’t
+been trained on, we can greatly increase their utility by providing external
+memory. This is very much analogous with how a computer system works – the large
+language model is like a CPU, and the memory implementations we’re covering in
+this chapter are like RAM.</p>
+
+<p>Key-value memory works for some scenarios, but a big limitation with this
+approach is figuring out which keys are relevant to the user ask. In our book
+example, we simply searched for a book title in the prompt. This runs into
+limitations very fast – what if the user only remembers the name of a character
+and asks in which book the character shows up? Since our key-value memory is
+keyed by book title, we won’t know which book description to retrieve. Language
+models are great at language processing, and it turns out there already is a
+solution perfect for this use-case: embeddings.</p>
+
+<h2 id="embeddings">Embeddings</h2>
+
+<p>Before we implement a memory based on embeddings, let’s understand what an
+embedding is. The next section will be a bit more theoretical, but it’s
+important to grasp the concept.</p>
+
+<h3>What are embeddings</h3>
+
+<p>Underneath all machine learning, there’s large arrays of numbers. That’s how
+neural networks represent inputs and weights. Large language models deal with
+text, so there needs to be some mapping of language to numbers. We would also
+expect some notion of similarity – the numerical representation of synonyms
+should be numbers close in value. Large language models encode semantic meaning
+through this <em>closeness</em> of values.</p>
+
+<p>To develop an intuitive understanding of this, let’s start by imagining a single
+dimension – meaning we associate a single number to a word. We would expect the
+distance between the word <em>cat</em> and the word <em>dog</em> to be smaller than the
+distance between the word <em>cat</em> and the word <em>helicopter</em>. If we plot these on a
+line, the points representing <em>cat</em> and <em>dog</em> would be closer together, and the
+word <em>helicopter</em> would be further away. That’s because cats and dogs are pets
+and are likely to come up in similar contexts together than next to aircrafts.</p>
+
+<p>Of course, a single dimension is not enough to express how closely related words
+are. <em>Kitten</em> should be as close to <em>cat</em> as <em>puppy</em> would be to <em>dog</em>. And
+since <em>kitten</em> is to <em>puppy</em> what <em>cat</em> is to <em>dog</em>, the distance between
+<em>kitten</em> and <em>puppy</em> should be similar to the distance between <em>cat</em> and <em>dog</em>.
+All still relatively far away from <em>helicopter</em>. Let’s add a second dimension
+and plot these points, as in figure 5.5.</p>
+
+<p><img src="images/05/fig5.png" alt="Figure 5.5"></p>
+
+<p><em>Figure 5.5: Word relationships represented in a 2-dimensional space.</em></p>
+
+<p>While harder to visualize, large language models represent words as vectors
+(lists) of numbers. This would be our pets and helicopter example above but
+extended to a much larger number of dimensions.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: <em>Word embeddings</em> are numerical representations of words that
+capture their meanings and relationships based on how they appear in a text
+corpus. These embeddings are generated by training a machine learning model on a
+large amount of text data. The model learns to assign each word a unique vector
+of numbers, which serves as its embedding.</p>
+</blockquote>
+
+<p>The values used to represent a word like <em>cat</em> are determined during model
+training. It’s very likely that cats and dogs show up together more often than
+cats and helicopters, so the model will capture this relationship by keeping the
+words closer together.</p>
+
+<p>We call these representations “embeddings” because the model takes a word and
+embeds it into a vector space. Embedding is not limited to single words only –
+sequences of text can also be embedded, capturing their meaning in the same
+vector space.</p>
+
+<p>OpenAI offers a set of models that output embeddings. The latest,
+<code>text-embedding-ada-002</code>, performs best and is cheapest ($0.0004 per 1000
+tokens<sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>), so that’s the one we’ll be using in this chapter.</p>
+
+<p>The embedding API is simpler than the completion APIs. It has 3 parameters:</p>
+
+<ul>
+<li><code>model</code> – The model we want to use for the embedding, in our case this will be
+<code>text-embedding-ada-002</code>.</li>
+<li><code>input</code> – A string or array of tokens – the text for which we want the
+embedding.</li>
+<li><code>user</code> – An end user ID. This is an optional parameter we can pass in to help
+OpenAI detect abuse. More on this in chapter 8, when we discuss safety and
+security. In short, imagine we offer a Q&amp;A application, but a user starts
+asking inappropriate questions. These would get passed through our code to the
+OpenAI API. If OpenAI detects abuse, it can be tied to a user ID and help us
+identify the abuser.</li>
+</ul>
+
+<p>Listing 5.9 implements a <code>get_embedding()</code> function.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+
+
+<span class="k">def</span> <span class="nf">get_embedding</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Embedding</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)],</span>
+        <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-embedding-ada-002&#39;</span><span class="p">)[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;embedding&#39;</span><span class="p">]</span>
+</pre></div>
+
+<p><em>Listing 5.9: Function to create an embedding.</em></p>
+
+<p>We use the <code>openai</code> library to call the <code>Embedding.create()</code> function. We
+replace newlines with spaces in the input text and omit the optional <code>user</code>
+parameter. We won’t cover the full response shape we get from the model. The
+<code>embedding</code> property of the first item in the returned data array contains our
+embedding. This function is available in the <code>llm_utils</code> library.</p>
+
+<p>Listing 5.10 calls this function to get the embedding for the word <em>cat</em>.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">get_embedding</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">get_embedding</span><span class="p">(</span><span class="s1">&#39;cat&#39;</span><span class="p">))</span>
+</pre></div>
+
+<p><em>Listing 5.10: Embedding of the word “cat”.</em></p>
+
+<p>If you run this code, you will get a long list of numbers.</p>
+
+<p>We talked about relationships being captured in embeddings and how words that
+are more closely related are closer together in the vector space. But we haven’t
+talked about how we measure distance.</p>
+
+<p>There are several formulas to do this. OpenAI recommends using cosine
+similarity<sup id="fnref3"><a href="#fn3" rel="footnote">3</a></sup> to measure the distance between two embeddings (i.e., two lists
+of numbers).</p>
+
+<blockquote>
+<p><strong>Sidebar: Cosine similarity and cosine distance</strong></p>
+
+<p>For vectors <code>A</code> and <code>B</code>, the <em>cosine similarity</em> is:</p>
+
+<p>\(\cos(\theta)=\frac{AB}{\left\|A\right\|\left\|B\right\|}=\frac{\sum_{i=1}^{n}A_iB_i}{\sqrt{\sum_{i=1}^{n}A_i^2}\sqrt{\sum_{i=1}^{n}B_i^2}}\)</p>
+
+<p>If you haven’t done math in a while the formula might look scary but it isn’t:
+the top of the fraction is the <em>dot product</em> of vectors <code>A</code> and <code>B</code>, which
+simply means multiplying the first element of <code>A</code> with the first element of <code>B</code>,
+the second element of <code>A</code> with the second element of <code>B</code> and so on, and finally
+adding up all these products.</p>
+
+<p>At the bottom of the fraction, we multiply the length of the two vectors. To
+compute the length of vector <code>A</code>, we square each of the elements, sum the
+result, then get the square root of that. We multiply the length of <code>A</code> with
+the length of <code>B</code>.</p>
+
+<p>Cosine similarity is the cosine of the angle between the vectors. The closer
+the vectors, the closer this value will be to 1. The less they have in common,
+the closer they are to 0.</p>
+
+<p><em>Cosine distance</em> is <code>1 – cosine similarity</code>. Since we want a measure of
+distance, we subtract the similarity from 1. The closer the vectors, the closer
+the distance gets to 0 and vice-versa, the further apart the vectors, the closer
+the distance gets to 1.</p>
+</blockquote>
+
+<p>Listing 5.11 shows the implementation of cosine distance.</p>
+<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">cosine_distance</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">1</span> <span class="o">-</span> <span class="nb">sum</span><span class="p">([</span><span class="n">a_i</span> <span class="o">*</span> <span class="n">b_i</span> <span class="k">for</span> <span class="n">a_i</span><span class="p">,</span> <span class="n">b_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)])</span> <span class="o">/</span> <span class="p">(</span>
+        <span class="nb">sum</span><span class="p">([</span><span class="n">a_i</span> <span class="o">**</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">a_i</span> <span class="ow">in</span> <span class="n">a</span><span class="p">])</span> <span class="o">**</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="nb">sum</span><span class="p">([</span><span class="n">b_i</span> <span class="o">**</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">b_i</span> <span class="ow">in</span> <span class="n">b</span><span class="p">])</span> <span class="o">**</span> <span class="mf">0.5</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 5.11: Cosine distance.</em></p>
+
+<p>As described in the sidebar, the first sum is iterating over pairs of elements
+from <code>a</code> and <code>b</code> and multiplying them together. This is divided by the sum of
+the squares of all the elements in <code>a</code> raised to the 1/2 power (square root)
+times the sum of the squares of all the elements in <code>b</code> raised to the 1/2 power.
+All of this subtracted from 1. This function is also available in the
+<code>llm_utils</code> library.</p>
+
+<p>Cosine distance is not the only way of determining how close two embeddings are.
+Euclidean distance<sup id="fnref4"><a href="#fn4" rel="footnote">4</a></sup> is another common option. Though for vectors normalized
+to be in the [0, 1] range, like the OpenAI embeddings, cosine distance and
+Euclidean distance are the same.</p>
+
+<p>With the math out of the way, let’s see why this is so important.</p>
+
+<h3>Memory based on embeddings</h3>
+
+<p>Remember, the key challenge with our key-value memory was identifying which data
+we should add to the prompt. In our book Q&amp;A example, we searched for book
+titles in the user input and pulled in the information based on what we found.
+But we saw this breaks down fast if, for example, the user is asking about a
+character but doesn’t know which book the character shows up in.</p>
+
+<p>This is where embeddings become very useful. Instead of relying on a book title
+or some other indexing schema, we compute the embedding of each chunk of data we
+have. When the user provides some input, we compute the embedding of the input.
+We then use the cosine distance to see which of our pieces of data is close to
+what the user is asking and pull that data into the prompt.</p>
+
+<p>Let’s redo our Pod Racing example from chapter 4. Instead of fine-tuning a model
+to implement Q&amp;A, we’ll use a memory based on embeddings.</p>
+
+<p>First, we’ll get the embedding vectors for each of our text files, and store
+these in a JSON file as pairs of <code>file path: embedding</code>. Listing 5.12 shows how
+to do this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">get_embedding</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">embeddings</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+    <span class="n">embeddings</span><span class="p">[</span><span class="n">path</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_embedding</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;embeddings.json&#39;</span><span class="p">,</span> <span class="s1">&#39;w+&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 5.12: Embedding the Pod Racing dataset.</em></p>
+
+<p>We read each text file in our Pod Racing dataset (<code>league.txt</code>, <code>race1.txt</code>,
+<code>race2.txt</code>, <code>race3.txt</code>, <code>race4.txt</code> and <code>race5.txt</code>). We call
+<code>get_embedding()</code> to produce the embedding of the text, then store this in a
+dictionary keyed by the file path. Finally, we save the dictionary as
+<code>embeddings.json</code>.</p>
+
+<p>Now let’s see how our Q&amp;A solution works. Listing 5.13 implements the Q&amp;A chat
+with embeddings. To keep things simple, we use a chat without memory. That means
+we won’t be able to ask the large language model follow up questions.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span><span class="p">,</span> <span class="n">get_embedding</span><span class="p">,</span> <span class="n">cosine_distance</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">embeddings</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="s1">&#39;embeddings.json&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">nearest_embedding</span><span class="p">(</span><span class="n">embedding</span><span class="p">):</span>
+    <span class="n">nearest</span><span class="p">,</span> <span class="n">nearest_distance</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">1</span>
+
+    <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">embedding2</span> <span class="ow">in</span> <span class="n">embeddings</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">distance</span> <span class="o">=</span> <span class="n">cosine_distance</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">embedding2</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">distance</span> <span class="o">&lt;</span> <span class="n">nearest_distance</span><span class="p">:</span>
+            <span class="n">nearest</span><span class="p">,</span> <span class="n">nearest_distance</span> <span class="o">=</span> <span class="n">path</span><span class="p">,</span> <span class="n">distance</span>
+
+    <span class="k">return</span> <span class="n">nearest</span>
+
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are a Q&amp;A AI.&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Here are some facts that can help you answer the following question: {{data}}&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;{{prompt}}&#39;</span><span class="p">}]})</span>
+
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">context</span> <span class="o">=</span> <span class="n">nearest_embedding</span><span class="p">(</span><span class="n">get_embedding</span><span class="p">(</span><span class="n">prompt</span><span class="p">))</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span> <span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 5.13: Pod Racing Q&amp;A using embeddings.</em></p>
+
+<p>First, we load the embeddings we got with listing 5.12 from <code>embeddings.json</code>.
+We then implement a <code>nearest_embedding()</code> function which, given an embedding,
+iterates over the embeddings in our dataset and returns the nearest key. In this
+case, the key is the path to the file.</p>
+
+<p>Our chat template has two parameters: <code>data</code> and <code>prompt</code>. <code>data</code> is information
+we retrieve from memory. <code>prompt</code> is the user question.</p>
+
+<p>Putting it all together, we take an input question from the user as <code>prompt</code>, we
+call <code>get_embedding()</code> to get the embedding of the question, and find the
+nearest embedding in our memory. That is the data that’s most closely related to
+the question. <code>nearest_embedding()</code> gives us the path to the file, so we open
+the file and read it into <code>data</code>.</p>
+
+<p>Finally, we prompt the large language model, providing the relevant data and
+user question. We print the response.</p>
+
+<p>Listing 5.14 shows an example interaction.</p>
+<div class="highlight"><pre><span></span>user: What happened to Senn Kava during the Genosis Challenge?
+assistant: During the Genosis Challenge Pod Racing race, Senn Kava encountered
+an unexpected technical glitch during a crucial stage of the race. A malfunction
+in the pod&#39;s stabilization system caused Kava to lose control momentarily,
+resulting in a brief deviation from the racing line. Despite this setback,
+Kava&#39;s skillful recovery and determination enabled them to regain momentum and
+finish in third place.
+user: In which race did a pilot find an uncharted shortcut?
+assistant: Kael Voss, the pilot of the Razor Blade, found an uncharted shortcut
+during the Coruscant Circuit Pod Racing race. He veered off the traditional
+track, navigating through a perilous maze of lower city alleys and weaving
+through oncoming traffic in an attempt to gain an advantage over the other
+racers.
+</pre></div>
+
+<p><em>Listing 5.14: Example Q&amp;A interaction.</em></p>
+
+<p>Note we get correct answers to the questions, based on the facts in our text
+files, even though we decide which facts to add to the prompt at runtime based
+on the question.</p>
+
+<p>For example, for the second question in listing 5.14 (<em>in which race did a pilot
+find an uncharted shortcut?</em>), the content of <code>race2.txt</code> was passed in as
+<code>data</code> to the prompt. That’s the only file that contains the information the
+model needed to produce the response.</p>
+
+<p>This is the key takeaway for why we want to use embeddings: the second question
+didn’t mention either a pilot or a race, so it would’ve gotten complicated if we
+wanted to devise some other mechanism to retrieve the right data. But using
+embeddings, it turned out that indeed <code>race2.txt</code> was the <em>nearest</em> to the user
+question.</p>
+
+<p>Our Q&amp;A solution performs better than the one in chapter 4, which relied on a
+fine-tuned model. That’s because here we can use a newer generation model like
+<code>gpt-3.5-turbo</code> to answer questions, while the only models that can be
+fine-tuned are older base models. As long as we have a way to retrieve the data
+the model needs to answer questions, we get much better milage from prompting
+newer smarter models.</p>
+
+<h3>Applications</h3>
+
+<p>We looked at Q&amp;A, but this is not the only application for memory/embeddings.
+Going back to our first example in this chapter, a chat bot, we said that
+storing the conversation in a list and popping off old items might make the
+model lose context. We could instead store each line of the conversation as an
+embedding and be smart about which items we retrieve that are relevant to the
+current topic.</p>
+
+<p>Another application is prompt selection: remember in chapter 3 we used a
+selection prompt – telling the large language models which prompts it has
+available and selecting between these (in our example we had a lawyer prompt and
+a writer prompt). We could instead use distance between the embedding of the ask
+and embeddings of available prompts to select the best prompt. The embedding of
+a lawyer should be closer to an NDA document than that of a writer.</p>
+
+<p>A few more scenarios:</p>
+
+<ul>
+<li>Personalized recommendations: We can store user preferences and history and
+use it to generate custom-tailored recommendations.</li>
+<li>Interactive storytelling: Use external memory to store the story context,
+character information etc. and generate a coherent story across multiple
+interactions.</li>
+<li>Healthcare: Store medical knowledge and patient data as external memory and
+retrieve the relevant data to help with diagnosis and treatment.</li>
+<li>Legal research: Store legal precedents, case law, documents etc. as external
+memory and retrieve the relevant data to help with case analysis and legal
+advice.</li>
+<li>Education: Store course content, student preferences and learning history to
+provide customized e-learning powered by AI.</li>
+</ul>
+
+<p>There are many applications that would be impossible to pull off without a solid
+memory story. Another very important scenario we’ll cover in depth in the next
+chapter is interacting with external systems, where again memory plays a crucial
+role in storing the available interactions.</p>
+
+<h3>Scaling</h3>
+
+<p>To keep things simple, we’ve been dealing with toy examples. Let’s talk a bit
+about scaling. Our approach was to create an embedding for each of our text
+files, then pick the nearest one to the user question. We can refactor this to
+scale in several ways.</p>
+
+<p>First, it’s up to us how large we want a unit of data to be. It can be a whole
+file, or a paragraph. Depending on our specific scenario and dataset, we can
+choose different ways to split things up.</p>
+
+<p>We are also not limited to just injecting one piece of data into the prompt. If
+we’re dealing with a much larger dataset, we can look for the top n nearest
+embeddings and pass all of them in.</p>
+
+<p>Finally, finding the nearest embedding in a huge dataset can become a
+bottleneck. Let’s address this next.</p>
+
+<h2 id="vector-databases">Vector databases</h2>
+
+<p>Our toy dataset is tiny enough that we have no problem iterating over all 6
+embeddings and comparing them with the question embedding, but if we have a
+million embeddings, things can get much slower.</p>
+
+<p>Finding the nearest embeddings in a huge dataset can be done very efficiently
+using a <em>vector database</em>.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: A <em>vector database</em> is a specialized type of database designed
+to store and efficiently retrieve vector data. Unlike traditional databases that
+primarily handle structured data (e.g., tables with rows and columns), vector
+databases are optimized for managing and querying high-dimensional vector
+representations.</p>
+</blockquote>
+
+<p>Let’s throw a vector database in the mix to see how we can use that for storage
+and retrieval.</p>
+
+<h3>Using Chroma</h3>
+
+<p>For this example, we’ll use Chroma<sup id="fnref5"><a href="#fn5" rel="footnote">5</a></sup>, an open-source vector database. First,
+let’s install it using the Python package manager (see listing 5.15).</p>
+<div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>chromadb
+</pre></div>
+
+<p><em>Listing 5.15: Installing Chroma using the Python package manager.</em></p>
+
+<p>We will create a new database, embed our Pod Racing facts there, then
+reimplement our Q&amp;A chat to leverage Chroma. Listing 5.16 shows the embedding
+part.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">chromadb</span>
+<span class="kn">from</span> <span class="nn">chromadb.config</span> <span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span> <span class="nn">chromadb.utils</span> <span class="kn">import</span> <span class="n">embedding_functions</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">Settings</span><span class="p">(</span>
+    <span class="n">chroma_db_impl</span><span class="o">=</span><span class="s1">&#39;duckdb+parquet&#39;</span><span class="p">,</span>
+    <span class="n">persist_directory</span><span class="o">=</span><span class="s1">&#39;racingdb&#39;</span><span class="p">))</span>
+
+<span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span>
+    <span class="s1">&#39;pod-racing&#39;</span><span class="p">,</span>
+    <span class="n">embedding_function</span><span class="o">=</span><span class="n">embedding_functions</span><span class="o">.</span><span class="n">OpenAIEmbeddingFunction</span><span class="p">(</span>
+        <span class="n">api_key</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">],</span>
+        <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;text-embedding-ada-002&quot;</span>
+    <span class="p">))</span>
+
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+    <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span>
+
+    <span class="n">collection</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">documents</span><span class="o">=</span><span class="p">[</span><span class="n">text</span><span class="p">],</span> <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">])</span>
+
+<span class="n">client</span><span class="o">.</span><span class="n">persist</span><span class="p">()</span>
+</pre></div>
+
+<p><em>Listing 5.16: Storing the Pod Racing facts in Chroma.</em></p>
+
+<p>We first create a new database client using <code>chromadb.Client()</code>. The API
+supports various settings, can run in client/server mode etc., but we’ll keep
+things simple and run an in-memory instance. We’ll want to save to disk, so
+we’re specifying the format in which we want the data to be persisted (in this
+case as Parquet files using DuckDB<sup id="fnref6"><a href="#fn6" rel="footnote">6</a></sup>) and the path to the folder where we want
+the data saved. That’s the <code>racingdb</code> folder.</p>
+
+<p>Next, we create a collection of documents named <code>pod-racing</code>. Chroma comes with
+a bunch of different embedding functions, the default being a built-in
+mini-model. We’ll use the OpenAI embedding (from <code>text-embedding-ada-002</code>) to
+keep parity with our previous example.</p>
+
+<p>I noticed using the built-in embedding produces worse results, for example it
+doesn’t retrieve the right documents for some queries (due to different
+embeddings and distances). This is expected – the better the model, the better
+the embedding, and a mini-model running locally can’t compete with a large
+language model running in the cloud.</p>
+
+<p>Chroma provides several embedding functions, including
+<code>OpenAIEmbeddingFunction()</code>, to which we need to pass an API key.</p>
+
+<p>We iterate over our dataset and add each document to the collection using
+<code>collection.add()</code>. We need to provide the <code>documents</code> and unique <code>ids</code>. The
+documents get automatically converted to vectors using the embedding function we
+configured.</p>
+
+<p>Finally, we save the database to disk by calling <code>client.persist()</code>. This should
+create a <code>racingdb</code> folder inside the current folder, containing the persisted
+data.</p>
+
+<p>Let’s now reimplement our chat using the Chroma API. Listing 5.17 shows the
+updated implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">chromadb</span>
+<span class="kn">from</span> <span class="nn">chromadb.utils</span> <span class="kn">import</span> <span class="n">embedding_functions</span>
+<span class="kn">from</span> <span class="nn">chromadb.config</span> <span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">Settings</span><span class="p">(</span>
+    <span class="n">chroma_db_impl</span><span class="o">=</span><span class="s1">&#39;duckdb+parquet&#39;</span><span class="p">,</span>
+    <span class="n">persist_directory</span><span class="o">=</span><span class="s1">&#39;racingdb&#39;</span><span class="p">))</span>
+
+<span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_collection</span><span class="p">(</span>
+    <span class="s1">&#39;pod-racing&#39;</span><span class="p">,</span>
+    <span class="n">embedding_function</span><span class="o">=</span><span class="n">embedding_functions</span><span class="o">.</span><span class="n">OpenAIEmbeddingFunction</span><span class="p">(</span>
+        <span class="n">api_key</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">],</span>
+        <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;text-embedding-ada-002&quot;</span>
+    <span class="p">))</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are a Q&amp;A AI.&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Here are some facts that can help you answer the following question: {{data}}&#39;</span><span class="p">},</span>
+                  <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;{{prompt}}&#39;</span><span class="p">}]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">query_texts</span><span class="o">=</span><span class="p">[</span><span class="n">prompt</span><span class="p">],</span> <span class="n">n_results</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span>
+        <span class="s1">&#39;documents&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span> <span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="si">}</span><span class="s1">: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 5.17: Pod racing Q&amp;A using Chroma.</em></p>
+
+<p>Like listing 5.13, we’re using a chat template in which we inject relevant
+<code>data</code> and the user <code>prompt</code>.</p>
+
+<p>The difference is we don’t use our <code>embedding.json</code> and handcrafted
+<code>nearest_embedding()</code> function. Instead, we use <code>chromadb</code>. We create a client,
+configured like the client in listing 5.16, to use the <code>racingdb</code> subfolder and
+DuckDB plus Parquet for storage. This should load the data we persisted.</p>
+
+<p>We then call <code>get_collection()</code>, again passing the OpenAI embedding function
+configured with our API key.</p>
+
+<p>The chat template is the same as before, and the interactive loop, except that
+instead of <code>nearest_embedding()</code> we now call <code>collection.query()</code> to retrieve
+the relevant data. The query text is the user prompt, since that’s the text we
+want to compute an embedding for and find the nearest stored embeddings. The
+<code>n_results</code> parameter tells Chroma how many nearest documents to retrieve – we
+only ask for one.</p>
+
+<p>We won’t cover the API in depth, suffice to say it returns a dictionary which
+includes, among other things, the original text we embedded. We’ll save this as
+data.</p>
+
+<h3>Vector databases</h3>
+
+<p>As we just saw, vector databases abstract away the embedding and retrieval of
+information. This allows us to scale when implementing complex solutions over
+large datasets. We used Chroma in our example. There are several other options
+to consider:</p>
+
+<ul>
+<li>Weaviate (open-source): <a href="https://weaviate.io/">https://weaviate.io/</a>. Also offered as fully managed
+SaaS on GCP or hybrid-SaaS (managed data plane) on Azure, AWS, and GCP.</li>
+<li>Qdrant (open-source): <a href="https://qdrant.tech">https://qdrant.tech</a>. Also offered as fully managed
+SaaS (<a href="https://cloud.qdrant.io/">https://cloud.qdrant.io/</a>).</li>
+<li>Milvus (open-source): <a href="https://milvus.io/">https://milvus.io/</a>. Also offered as fully managed SaaS
+(<a href="https://zilliz.com/">https://zilliz.com/</a>).</li>
+<li>Pinecone: <a href="https://pinecone.io/">https://pinecone.io/</a>. Also offered on AWS and GCP.</li>
+<li>...and likely more.</li>
+</ul>
+
+<p>Some other, more established and well-known databases also have vector search capabilities:</p>
+
+<ul>
+<li>Redis: <a href="https://redis.com/solutions/use-cases/vector-database/">https://redis.com/solutions/use-cases/vector-database/</a>.</li>
+<li>Postgres, with the pgvector engine: <a href="https://github.com/pgvector/pgvector">https://github.com/pgvector/pgvector</a>.</li>
+<li>Azure CosmosDB (for MongoDB): <a href="https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/vcore/vector-search">https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/vcore/vector-search</a>.</li>
+</ul>
+
+<p>Vector databases are very popular nowadays, with multiple startups competing in
+the space and vector storage and retrieval capabilities being added to other
+database engines. The reason for their popularity is exactly because they are a
+key component in AI-powered solutions. That said, memory for large language
+models is not a fully solved problem – there is plenty of room to innovate and I
+expect many improvements over the upcoming period. For example, let’s look at
+the memory implementation used in a paper simulating several intelligent agents
+interacting with each other in a simulated world.</p>
+
+<h2 id="a-novel-approach">A novel approach</h2>
+
+<p>An interesting approach is described in the paper <em>Generative Agents:
+Interactive Simulacra of Human Behavior</em><sup id="fnref7"><a href="#fn7" rel="footnote">7</a></sup>. The paper describes a simulation,
+using a large language model, of several agents (called <em>generative agents</em>)
+that interact in a sandbox environment. The agents simulate human behavior –
+they work, interact, form opinions and so on. I do recommend reading the paper
+(link in the footnote); it is a fascinating read.</p>
+
+<p>Related to this chapter, the paper describes the agent architecture, including
+memory. For this scenario, the memory is implemented as a stream of memory
+objects. These are <em>observations</em> captured by an agent and stored as a creation
+timestamp, last access timestamp, and the observation as a natural language
+description produced by the large language model.</p>
+
+<p>Retrieving data from the memory stream is done by identifying the most relevant
+observations based on the agent’s current situation. The three main components
+used in scoring how important a memory is are <em>recency</em>, <em>importance</em>, and
+<em>relevance</em>.</p>
+
+<p><em>Recency</em> assigns higher scores to more recently accessed memories. As time
+passes (in the paper’s case this is simulation time), the recency decreases so
+the memory is less likely to get selected.</p>
+
+<p><em>Importance</em> is used to distinguish important memories from mundane ones. An
+example cited in the paper are eating breakfast (low importance) vs. a breakup
+with a significant other (high importance). Importance is scored from 1 to 10.
+Scoring is done by the large language model, using a prompt like the example in
+listing 5.18.</p>
+<div class="highlight"><pre><span></span>On the scale of 1 to 10, where 1 is purely mundane (e.g., brushing teeth, making
+bed) and 10 is extremely poignant (e.g., a break up, college acceptance), rate
+the likely poignancy of the following piece of memory. Memory: buying groceries
+at The Willows Market and Pharmacy Rating: &lt;fill in&gt;
+</pre></div>
+
+<p><em>Listing 5.18: Prompt for rating a memory.</em></p>
+
+<p><em>Relevance</em> is determined using embeddings, as we saw in the previous sections.
+This is computed as the cosine distance between the memory observation and the
+query (what the agent is currently trying to accomplish).</p>
+
+<p>All three scores (recency, importance, and relevance) are normalized to be in
+the range [0, 1], and the score is computed as their sum.</p>
+
+<p>We won’t provide a full implementation of this. The example only aims to
+stimulate the imagination. For this particular application (agents simulating
+human behavior), turns out simply retrieving memories based on embedding
+distance is not the best solution. A better solution includes assigning an
+importance score to each memory (using a large language model!) and taking into
+account when a memory was last accessed. Embeddings are still a key component,
+as they easily tell us how closely related two pieces of text are from a
+semantic perspective, but other data points can improve the usefulness of
+memories we retrieve. What other data points would improve retrieval in your
+application?</p>
+
+<p>The key takeaway is memory and retrieval is not a solved problem by far. As
+large language models get integrated into more solutions, novel ways of storing
+and retrieving memory will be discovered.</p>
+
+<p>So far we learned about prompt engineering, learning, and memory. Another
+critical piece for building a useful AI solution is giving the large language
+model capabilities to interact with external systems. Continuing with the CPU
+analogy, if our memory acts as the RAM, we also need some I/O capabilities for a
+complete solution. The next chapter is all about this.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>The lack of memory of large language models is an important limitation we need
+to work around.</li>
+<li>A simple list where we pop off old memories as we reach token limits works in
+some cases but has major drawbacks as we start forgetting things.</li>
+<li>Another option is key-value storage for memory, which is limited by the
+difficulty of identifying the best keys to retrieve if not exactly matched in
+the user input.</li>
+<li>Embeddings assign lists of numbers to words or paragraphs of text.</li>
+<li>The more (semantically) related two words or two pieces of text are, the
+closer their embeddings.</li>
+<li>We can use an embedding-based memory to retrieve the memories most relevant to
+some given input.</li>
+<li>Vector databases enable efficient storage and retrieval of embeddings for
+scaling out AI solutions.</li>
+<li>A novel approach to memory considers, beyond embeddings, the recency and
+importance of a given memory. There is plenty of room to innovate in the
+memory storage and retrieval space.</li>
+</ul>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p>These fictional books show up in the game Cultist Simulator:
+  <a href="https://store.steampowered.com/app/718670/Cultist_Simulator/">https://store.steampowered.com/app/718670/Cultist_Simulator/</a>.&nbsp;<a href="#fnref1" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn2">
+<p><a href="https://platform.openai.com/docs/guides/embeddings/embedding-models">https://platform.openai.com/docs/guides/embeddings/embedding-models</a>&nbsp;<a href="#fnref2" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn3">
+<p><a href="https://en.wikipedia.org/wiki/Cosine_similarity">https://en.wikipedia.org/wiki/Cosine_similarity</a>&nbsp;<a href="#fnref3" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn4">
+<p><a href="https://en.wikipedia.org/wiki/Euclidean_distance">https://en.wikipedia.org/wiki/Euclidean_distance</a>&nbsp;<a href="#fnref4" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn5">
+<p><a href="https://www.trychroma.com/">https://www.trychroma.com/</a>, on GitHub at
+  <a href="https://github.com/chroma-core/chroma">https://github.com/chroma-core/chroma</a>&nbsp;<a href="#fnref5" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn6">
+<p><a href="https://duckdb.org/">https://duckdb.org/</a>&nbsp;<a href="#fnref6" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn7">
+<p><a href="https://arxiv.org/abs/2304.03442">https://arxiv.org/abs/2304.03442</a>&nbsp;<a href="#fnref7" rev="footnote">&#8617;</a></p>
+</li>
+
+</ol>
+</div>
+
+</article>
+<nav>
+<p>
+
+<span>Previous: <a href="learning-and-tuning.html">Learning and Tuning</a>. 
+
+
+</p>
+</nav>
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
+</body>
+</html>
