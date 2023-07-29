@@ -23,6 +23,7 @@ chapter_titles = {
     '03': 'Prompt Engineering',
     '04': 'Learning and Tuning',
     '05': 'Memory and Embeddings',
+    '06': 'Interacting With External Systems',
 }
 
 # Chapter heading mappings
@@ -35,12 +36,15 @@ chapter_headings = {
     '03': 'Chapter 3: %s',
     '04': 'Chapter 4: %s',
     '05': 'Chapter 5: %s',
+    '06': 'Chapter 5: %s',
 }
 
 # Chapter order
-chapters = ['index', 'toc', '01', '02', '03', '04', '05']
+chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06']
 
 # Get chapter outpath
+
+
 def get_chapter_outpath(index):
     if index == 'index':
         return 'index.html'

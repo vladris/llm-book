@@ -36,7 +36,12 @@
   * [Vector databases](./memory-and-embeddings.html#vector-databases)
   * [A novel approach](./memory-and-embeddings.html#a-novel-approach)
   * [Summary](./memory-and-embeddings.html#summary)
-* Chapter 6: Integrating With External Systems
+* [Chapter 6: Integrating With External Systems](./interacting-with-external-systems.html)
+  * [A function calling mechanism](./interacting-with-external-systems.html#a-function-calling-mechanism)
+  * [OpenAI functions](./interacting-with-external-systems.html#openai-functions)
+  * [Non-native functions](./interacting-with-external-systems.html#non-native-functions)
+  * [Function libraries](./interacting-with-external-systems.html#function-libraries)
+  * [Summary](./interacting-with-external-systems.html#summary)
 * Chapter 7: Planning
 * Chapter 8: Safety and Security
 * Chapter 9: Frameworks
