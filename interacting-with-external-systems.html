@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Interacting With External Systems ~ LLMs at Work</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-NhSC1YmyruXifcj/KFRWoC561YpHpc5Jtzgvbuzx5VozKpWvQ+4nXhPdFgmx8xqexRcpAglTj9sIBWINXa8x5w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="./static/style.css" type="text/css">
+<link rel="stylesheet" href="./static/pygments.css" type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
+</head>
+<body>
+<header>
+  <div class="title"><span>Chapter 5: Interacting With External Systems</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
+  </ul>
+</header>
+<article>
+<h1>Interacting With External Systems</h1>
+
+<p><img src="images/06/cover.png" alt="Interacting With External Systems"></p>
+
+<p>In this chapter:</p>
+
+<ul>
+<li>Building a useful personal assistant.</li>
+<li>Using the OpenAI API to call functions.</li>
+<li>Implementing an alternative function mechanism.</li>
+<li>Leveraging large numbers of functions.</li>
+</ul>
+
+<p>In this chapter, we’ll put together all the building blocks we learned about in
+the previous chapters, including the OpenAI API, prompt templating, few-shot
+learning, and memory to build a much more useful solution: a personal assistant
+that can interact with the outside world.</p>
+
+<p>First, we need a bit of plumbing: a function calling mechanism. This takes a
+JSON describing a function call by specifying the function name and parameter.
+It invokes the given function and returns the result to the caller. This piece
+of infrastructure underpins the rest of the chapter.</p>
+
+<p>We’ll see how the OpenAI API supports function calling, including a dedicated
+request parameter through which we can pass it function definitions, and a
+response indicating the model wants us to call a function (we’ll use the
+mechanism we just described). The model expects us to call the function and pass
+it back the reply.</p>
+
+<p>What if you’re not using OpenAI? While most of the topics covered in this book
+apply to all large language models, this particular way of describing functions
+is very much OpenAI-specific. We’ll cover an alternative implementation for
+this, which uses few-shot learning instead of relying on the special API. We’ll
+see that we can achieve the same results even this case, meaning we should be
+able to get any large language model to interact with other systems, be it
+OpenAI or not.</p>
+
+<p>Finally, we will talk about scaling. Passing a couple of function definitions in
+a prompt is fine, but if we want a truly powerful assistant, we might have
+dozens of functions available, some completely unrelated to one particular user
+ask. In this case, we can store these functions in a vector database, and
+retrieve the most relevant ones – an application of memory, which we learned
+about in chapter 5.</p>
+
+<p>We’ll wrap up with a few other examples of large language model interacting with
+other systems, to show personal assistants are not only application of this.</p>
+
+<p>Let’s start by by building our function calling mechanism, then see how we can
+leverage the newly (at the time of writing) introduced <em>functions</em> in the OpenAI
+API.</p>
+
+<h2 id="a-function-calling-mechanism">A function calling mechanism</h2>
+
+<p>One of the major limitations of large language models is their inability to
+directly interact with the outside world. If we want to implement an artificial
+intelligence personal assistant, we can easily have great conversations with it,
+but what about having it <em>do</em> things on our behalf, like scheduling meetings?
+Let’s look at building such a personal assistant, and in the process see how we
+can implement this using OpenAI functions. First, we need a bit of glue.</p>
+
+<h3>External APIs</h3>
+
+<p>We’ll start with the non-AI part of our program. Let’s say we have an email and
+calendar solution we’re integrating with. We have an address book API that takes
+an array of names and returns the corresponding email addresses and an API that
+schedules meetings. Listing 6.1 shows the mock implementations.</p>
+<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">get_emails</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;* Getting emails for </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">address_book</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;John Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;john.doe@example.com&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Jane Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;jane.doe@example.com&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">emails</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">emails</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">address_book</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">emails</span>
+
+
+<span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;* Meeting &#39;</span><span class="si">{</span><span class="n">subject</span><span class="si">}</span><span class="s2">&#39; scheduled for </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">recipients</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6.1: Mock implementations for address book and meeting scheduling.</em></p>
+
+<p>The <code>get_emails()</code> function takes an array of names, looks them up in the
+<code>address_book</code>, and returns a dictionary of names-to-emails. For example, if we
+pass in <code>[&#39;Jane Doe&#39;]</code> we should get back <code>{&#39;Jane Doe&#39;:
+&#39;jane.doe@example.com&#39;}</code>. Of course, a real-world implementation would actually
+talk to a service like Microsoft Exchange or Gmail. Note we’re also not handling
+unknown names to keep things simple.</p>
+
+<p>The <code>schedule_meeting()</code> function takes a subject, a set of recipients, and a
+time and “schedules” a meeting. In this case we just print this to the screen
+and return a <code>{&#39;success&#39;: True}</code> object. A real-world implementation would send
+out meeting invitations.</p>
+
+<p>Both functions call <code>print()</code>, so when we run our end-to-end example we’ll see
+how they get called. Their output is prefixed with <code>*</code>.</p>
+
+<p>We now have our API. Let’s see how we can connect it to the large language
+model. First, we’ll implement a glue function that takes a <code>function_call</code>
+argument which we expect to contain a <code>name</code> (the name of the function to call)
+and <code>arguments</code> (string representation of the JSON parameters to pass to the
+function). Listing 6.2 shows the implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
+
+
+<span class="k">def</span> <span class="nf">get_emails</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+    <span class="o">...</span>
+
+<span class="k">def</span> <span class="nf">process_function_call</span><span class="p">(</span><span class="n">function_call</span><span class="p">):</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">function_call</span><span class="o">.</span><span class="n">name</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">function_call</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+
+    <span class="n">functions</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;get_emails&#39;</span><span class="p">:</span> <span class="n">get_emails</span><span class="p">,</span>
+        <span class="s1">&#39;schedule_meeting&#39;</span><span class="p">:</span> <span class="n">schedule_meeting</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">functions</span><span class="p">[</span><span class="n">name</span><span class="p">](</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 6.2: Function call mechanism.</em></p>
+
+<p>We’re omitting the <code>get_emails()</code> and <code>schedule_meeting()</code> implementations here
+as we just went over them in listing 6.1. We get the function name from
+<code>function_call.name</code> and we load the arguments into <code>args</code> using <code>json.loads()</code>.
+The <code>json.loads()</code> function parses a JSON string and outputs a Python object.</p>
+
+<p>Our available functions appear in the <code>functions</code> dictionary. We simply map from
+function name to function object.</p>
+
+<p>Finally, we return the result of calling the function (looked up by name) with
+the given arguments. This allows us to convert JSON into a function call. We get
+a JSON containing a function <code>name</code> property and an <code>arguments</code> property
+containing a JSON string. We load this into a Python object which we pass as
+<code>function_call</code> to our <code>process_function_call()</code> function.</p>
+
+<p>Figure 6.1 shows how this mechanism works.</p>
+
+<p><img src="images/06/fig1.png" alt="Figure 6.1"></p>
+
+<p><em>Figure 6.1: Calling a function given a JSON payload.</em></p>
+
+<p>We start with a JSON payload containing a <code>name</code> property and an <code>arguments</code>
+property.</p>
+
+<ol>
+<li>We load this into a Python object and pass it to <code>process_function_call()</code>. The function determines, based on the <code>name</code> property, which function to forward the <code>arguments</code> to. It also calls <code>json.loads()</code> to convert the <code>arguments</code> from a string into a Python object which becomes the function arguments for the called function.</li>
+<li>In our case, the function is <code>get_emails()</code>, which gets invoked with the argument names being the list <code>[&quot;Jane Doe&quot;]</code>.</li>
+</ol>
+
+<p>This little bit of glue enables us to take a description of a function to call
+and arguments to pass to it, dispatch the call at runtime to that function, and
+give back the result. The specific functions (<code>get_emails()</code>,
+<code>schedule_meeting()</code>) are less important, the key takeaway is we will need
+something like <code>process_function_call()</code> regardless of our application. In other
+words, we need some way to get from JSON to function invocation. The result also
+needs to be a JSON. In our case, we had our functions respond with JSON.
+Alternately, we can take a return object in the programming language we’re using
+and serialize it to JSON inside <code>process_function_call()</code>. Either way, the large
+language model will expect a JSON.</p>
+
+<p>Back to the fun AI part now: let’s see how we can connect this to an interaction
+with a large language model. OpenAI provides built-in support for this!</p>
+
+<h2 id="openai-functions">OpenAI functions</h2>
+
+<p>In chapter 2, when we covered the OpenAI API, we mentioned the <code>functions</code>
+request parameter and the <code>function_call</code> finish reason, but explicitly didn’t
+cover them there. We’ll revisit them here.</p>
+
+<p>This new API capability was added to provide a consistent way to achieve a very
+common scenario – having large language models interact with the outside world.
+We now have a way to describe what functions a model has available to call, and
+the model has a way to clearly tell us what function it would like to have
+called. We’ll start with how we describe functions to the large language model.</p>
+
+<h3>Describing functions</h3>
+
+<p>OpenAI now allows us to specify a set of functions available to it using the
+<code>functions</code> parameter. Listing 6.3 shows the template for our personal assistant
+that is now made aware of the two external APIs we implemented in listing 6.1.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are an AI personal assistant&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;functions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;get_emails&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Get the email addresses of a set of users given their names&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;parameters&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="nt">&quot;names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;items&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">                        </span><span class="p">}</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;schedule_meeting&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Sends a meeting invitation with the given subject to the given recipient emails at the given time&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;parameters&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="nt">&quot;subject&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">                    </span><span class="nt">&quot;recipients&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="p">,</span>
+<span class="w">                        </span><span class="nt">&quot;items&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">                        </span><span class="p">}</span>
+<span class="w">                    </span><span class="p">},</span>
+<span class="w">                    </span><span class="nt">&quot;time&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6.3: Chat template with function descriptions.</em></p>
+
+<p>We can save this template as <code>personal_assistant.json</code>. The <code>temperature</code> and
+<code>messages</code> properties should be familiar by now. What we haven’t seen before is
+the <code>functions</code> property. This is an array of function objects. Each function
+object has:</p>
+
+<ul>
+<li>A <code>name</code>, representing the name of the function to call.</li>
+<li>A <code>description</code>, which describes what the function does to the large language
+model.</li>
+<li>A <code>parameters</code> object defined in the JSON Schema format<sup id="fnref1"><a href="#fn1" rel="footnote">1</a></sup>.</li>
+</ul>
+
+<p>JSON Schema is a way to describe expected JSON properties and their types using
+JSON itself. OpenAI expects the root parameter to have type <code>object</code>. Then its
+<code>properties</code> contain the argument definitions.</p>
+
+<p>In our case, for <code>get_emails()</code> we have <code>names</code>, of type <code>array</code>, with the
+<code>items</code> of the array being of type <code>string</code>.</p>
+
+<p>For <code>schedule_meeting()</code> we have <code>subject</code> (type string), <code>recipients</code> (array of
+string), and <code>time</code> (type string).</p>
+
+<p>When we pass this to the model in a chat completion call (as we’ll see right
+away), the model will be aware of the external APIs available to it. The
+function descriptions count towards the token limit, meaning they consume
+tokens. See sidebar for how they are implemented “under the hood”.</p>
+
+<blockquote>
+<p><strong>Sidebar: Functions under the hood</strong></p>
+
+<p>The OpenAI documentation has this note: <em>Under the hood, functions are
+injected into the system message in a syntax the model has been trained on</em>.
+What does this mean? Large language models are trained, there is no way to
+“hardcode” something and guarantee some response. OpenAI came up with some
+syntax to describe function calls to a model, then used this during training
+until the model started replying with the right function calls more often than
+not (the documentation also clearly states that the model might output invalid
+JSON, so we need to verify the output).</p>
+
+<p>Much like memory, which we covered in chapter 5, the fact a model can’t
+interact with the other systems directly is a big limitation. As companies start
+integrating AI in their solutions, they devise various ways to make the large
+language models aware of what they can interact with and how. Of course, doing
+this with one-shot or few-shot learning or even fine-tuning, will not yield as
+good results as if a model was trained on a special syntax for function calling
+(that said, we’ll cover that alternative in the next section).</p>
+
+<p>With the training done, the function calling capability is part of the model
+and the model “knows” when and how to apply it to achieve the best results.</p>
+</blockquote>
+
+<p>We now have all our external capabilities in place. We’ll implement another chat
+system. This time around though, we’ll be able to ask it to schedule meetings
+using natural language and it will do so by calling the APIs we provided. But
+first, let’s go over how functions work with the OpenAI API.</p>
+
+<h3>Calling functions</h3>
+
+<p>In chapter 2, when we discussed the OpenAI API, parameters and responses, we
+deliberately skipped functions to keep things simple. We’ll revisit this now.</p>
+
+<p>We covered how we can pass <code>functions</code> as an optional parameter to make the
+model aware of APIs it can interact with. We said an API response contains a
+<code>finish_reason</code> which can be <code>stop</code> (processing finished successfully), <code>length</code>
+(token limit), <code>content_filter</code> (OpenAI flagged the content and aborted
+processing) or <code>function_call</code>.</p>
+
+<p>When the API returns a <code>finish_reason</code> as <code>function_call</code>, it means it asks us
+to run a function and give it back the result. We know chat completion calls
+return a message object. So far we’ve been using the <code>message.role</code> and
+<code>message.content</code> properties. When the model wants us to call a function, the
+content will be null. Instead, we’ll receive a <code>function_call</code> property
+containing the <code>name</code> of the function to call and the <code>arguments</code>. Let’s see a
+quick example. Listing 6.4 provides an API to the large language model and
+prints the response.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;What is the weather like today in Seattle?&#39;</span><span class="p">}],</span>
+    <span class="s1">&#39;functions&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;get_weather&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Gets the weather given a city name&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;city&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">}}</span>
+            <span class="p">}</span>
+        <span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+
+<p><em>Listing 6.4: Example prompt with function definition.</em></p>
+
+<p>This very simple example sends the user message “What is the weather like today
+in Seattle?” and tells the model it has a <code>get_weather()</code> function available,
+which takes an argument named <code>city</code> of type <code>string</code>.</p>
+
+<p>If you run this code, you will likely see a response like listing 6.5.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;finish_reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;function_call&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;function_call&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;arguments&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{\n  \&quot;city\&quot;: \&quot;Seattle\&quot;\n}&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;get_weather&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6.5: Example API response with function call.</em></p>
+
+<p>Note <code>finish_reason</code> is <code>function_call</code>. The <code>message</code> still has the <code>role</code> set
+to <code>assistant</code>, indicating a response from the large language model, but the
+<code>content</code> is empty. Instead, we get a <code>function_call</code> for the function
+<code>get_weather()</code> with the arguments captured as a JSON string.</p>
+
+<p>What happened? The model realized it can best answer the prompt (weather in
+Seattle) by calling this API. Since it can’t call the API directly, it gives us
+the details and expects us to pass it back the result.</p>
+
+<p>We pass back the result by appending it to the <code>messages</code> list. In this case,
+the <code>role</code> must be <code>function</code>, we also need to pass in a <code>name</code> property – the
+name of the function we called, and the <code>content</code> is what the function returned.
+In subsequent calls, the model will take into account these results, so it won’t
+call the same function again if it knows what it returned. Listing 6.6 shows a
+mock example of this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;What is the weather like today in Seattle?&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;function&#39;</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;get_weather&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Sunny and 75 degrees, with 10</span><span class="si">% c</span><span class="s1">hance of rain.&#39;</span><span class="p">}],</span>
+    <span class="s1">&#39;functions&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;get_weather&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Gets the weather given a city name&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;city&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">}}</span>
+            <span class="p">}</span>
+        <span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+
+<p><em>Listing 6.6: Mocking a function response.</em></p>
+
+<p>This is example is purely for us to grok the syntax of function calls and
+responses. Don’t worry, we’ll call some functions for real next. For now, note
+how we provide the same prompt as listing 6.4, except we add the result of
+<code>get_weather()</code> as the second message.</p>
+
+<p>Listing 6.7 shows the final response we get for this second call.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;finish_reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;index&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The weather today in Seattle is sunny with a temperature of 75 degrees. There is a 10% chance of rain.&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6.7: Example API response after function call.</em></p>
+
+<p>Before the model had the result of calling <code>get_weather()</code>, it responded with a
+<code>function_call</code>. Now, the <code>finish_reason</code> is <code>stop</code>, content has the final
+answer, and no function calling is needed.</p>
+
+<p>The typical interaction is:</p>
+
+<ol>
+<li>User asks for weather in some city.</li>
+<li>The model replies with a function_call for <code>get_weather()</code>.</li>
+<li>We run the <code>get_weather()</code> function, and append its result to the messages list.</li>
+<li>We run the completion again, now including the function result.</li>
+<li>The model has the data it needs to provide an answer.</li>
+</ol>
+
+<p>Figure 6.2 illustrates this typical interaction.</p>
+
+<p><img src="images/06/fig2.png" alt="Figure 6.2"></p>
+
+<p><em>Figure 6.2: Large language model interaction including function call.</em></p>
+
+<p>This figure has a lot of numbers, but it’s really not that complicated:</p>
+
+<ol>
+<li>We start with the user ask – <em>“How’s the weather in Seattle?”</em></li>
+<li>We also add to the request the functions we have available, in our case
+<code>get_weather()</code>.</li>
+<li>We send the request to the model.</li>
+<li>The model realizes it can best answer the question if it gets additional data
+from the function, so it responds with a <code>function_call</code>.</li>
+<li>Our function calling mechanism will know to invoke <code>get_weather()</code> with the
+right parameters as provided by the large language model and get back the
+result.</li>
+<li>We send the additional information to the model (of course, including the
+original request, as large language models don’t have memory).</li>
+<li>With this additional information, the model can produce the final response.</li>
+</ol>
+
+<p>The major difference between this and the diagrams we saw in previous chapters
+is the intermediate function call (steps 4 to 6), before the model produces its
+final response (step 7).</p>
+
+<p>In fact, as we will see soon, a model can request multiple function calls until
+it considers it has enough data to produce a response.</p>
+
+<p>With a good understanding of the API shape, let’s now put together our personal
+assistant. We already covered the template we’re going to use in listing 6.3 and
+saved it as <code>personal_assistant.json</code>. As a quick reminder, this template tells
+the large language model it has available a <code>get_emails()</code> function and a
+<code>schedule_meeting()</code> function, describes what these functions do, and the
+arguments they expect.</p>
+
+<p>Listing 6.8 shows the complete personal assistant chat.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+
+<span class="k">def</span> <span class="nf">get_emails</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;* Getting emails for </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">address_book</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;John Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;john.doe@example.com&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Jane Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;jane.doe@example.com&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">emails</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">emails</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">address_book</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">emails</span>
+
+
+<span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;* Meeting &#39;</span><span class="si">{</span><span class="n">subject</span><span class="si">}</span><span class="s2">&#39; scheduled for </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">recipients</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">process_function_call</span><span class="p">(</span><span class="n">function_call</span><span class="p">):</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">function_call</span><span class="o">.</span><span class="n">name</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">function_call</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+
+    <span class="n">functions</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;get_emails&#39;</span><span class="p">:</span> <span class="n">get_emails</span><span class="p">,</span>
+        <span class="s1">&#39;schedule_meeting&#39;</span><span class="p">:</span> <span class="n">schedule_meeting</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">functions</span><span class="p">[</span><span class="n">name</span><span class="p">](</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;personal_assistant.json&#39;</span><span class="p">)</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;&gt; &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+
+        <span class="k">if</span> <span class="s1">&#39;function_call&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">process_function_call</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">function_call</span><span class="p">)</span>
+            <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;function&#39;</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">function_call</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">result</span><span class="p">)})</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 6.8: Personal assistant chat with functions.</em></p>
+
+<p>We already covered the <code>get_emails()</code>, <code>schedule_meeting()</code>, and the glue
+function <code>process_function_call()</code>. Let’s focus on the chat interaction.</p>
+
+<p>As before, we take a user prompt and send it to the model. This time around, we
+do it in a loop. We take the response message and check whether it contains a
+<code>function_call</code>. If it does, we pass this to <code>process_function_call()</code> and we
+get back a <code>result</code>. We append to our <code>messages</code> list the result of the function
+call as JSON (<code>json.dumps()</code> is the inverse of <code>json.loads()</code> – it converts a
+Python object into a JSON string). After this we loop – we again invoke the chat
+completion, but now it should have additional data – the result of the function
+call.</p>
+
+<p>On the other hand, if the response we get from the large language model doesn’t
+include a <code>function_call</code>, we break the loop.</p>
+
+<p>Finally, we print the content of the response we got and add it to the message
+list.</p>
+
+<p>Hopefully not too complicated – we extended our interactive chat with function
+calling capabilities. As long as the model thinks a function call can help it
+provide a better answer, we invoke the requested function and pass it back the
+result. Once the model thinks function calls won’t help, it will provide a final
+(non-function call) answer, which we can print.</p>
+
+<p>Listing 6.9 shows an example interaction.</p>
+<div class="highlight"><pre><span></span>&gt; Schedule lunch with Jane Doe for Monday at noon at Tipsy Cow
+* Getting emails for [&#39;Jane Doe&#39;]
+* Meeting &#39;Lunch&#39; scheduled for Monday at 12:00 PM with [&#39;jane.doe@example.com&#39;]
+I have successfully scheduled a lunch with Jane Doe for Monday at noon at Tipsy Cow.
+</pre></div>
+
+<p><em>Listing 6.9: Example personal assistant interaction.</em></p>
+
+<p>The initial prompt asks the model to schedule a meeting with Jane Doe. The model
+correctly realizes that it needs Jane Doe’s email address in order to do this.
+It first responds with a <code>function_call</code> for <code>get_emails()</code>. As we can see in
+the sample output, the <code>get_emails()</code> function indeed gets called with the
+argument <code>[&#39;Jane Doe&#39;]</code>.</p>
+
+<p>We pass this back to the model. It then responds with another <code>function_call</code>,
+this time for <code>schedule_meeting()</code>. As we can see from our debug output (lines
+starting with <code>*</code>), the <code>schedule_meeting()</code> function is called with <code>subject</code>
+as <code>&#39;Lunch&#39;</code>, <code>time</code> as <code>&#39;Monday at 12:00 PM&#39;</code>, and <code>recipients</code> as
+<code>[&#39;jane.doe@example.com&#39;]</code>.</p>
+
+<p>This is exactly what we wanted! If we actually had real-world implementations
+for <code>get_emails()</code> and <code>schedule_meeting()</code>, a meeting invitation would be going
+out to our friend Jane Doe with a lunch invitation. Our large language model
+application is no longer just talk; it can now act. Before moving on, a few
+things to keep in mind.</p>
+
+<h3>Notes on reliability</h3>
+
+<p>To keep things simple, our toy examples mocked responses and we passed through
+the model replies to our <code>process_function_call()</code> whenever we got a
+<code>function_call</code> from the model. This assumes everything works great end-to-end.
+Remember though, we are dealing with non-deterministic models.</p>
+
+<p>We don’t have a guarantee the model will output valid JSON or that it won’t
+hallucinate calling a function that is not available. Quoting from the OpenAI
+documentation<sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>:</p>
+
+<blockquote>
+<p>Hallucinated outputs in function calls can often be mitigated with a system
+message. For example, if you find that a model is generating function calls with
+functions that weren&#39;t provided to it, try using a system message that says:
+<q>Only use the functions you have been provided with.</q></p>
+</blockquote>
+
+<p>In a production solution, we should ensure both that the JSON is well-formed and
+that the function to be called actually exist. If this is not the case, we need
+to give the model more constraints (“Only output valid JSON”, “Only use the
+functions you have been provided with” etc.) and retry.</p>
+
+<p>We’ll talk more about hallucinations in chapter 8, when we discuss safety and
+security, as model hallucinations are one of the key gotchas in this new world.
+A key thing to remember is to not assume you will always get a well-formed
+response and code defensively around this.</p>
+
+<p>Another thing to consider is how we would handle a failure in one of our
+external systems. What if, for whatever reason, we cannot retrieve the email of
+a user? We could report the failure back to the large language model and have it
+respond to the user or, alternately, we can catch the error and tell the user
+something is wrong, without another model roundtrip. If the function call
+failure is critical to complete the workflow, we might as well stop here.</p>
+
+<p>Throughout this book, we’ve been using the OpenAI API. Until now though,
+everything we learned applies to any other large language model. If you want to
+build your solution around a large language model offered by a different vendor,
+you still need to do prompt engineering, you can still teach it using one-shot
+or few-shot learning, or maybe fine-tune it. The large language model will have
+similar constraints on memory, and embeddings will be just as useful. A major
+difference though is it might not be trained on this specific function
+invocation syntax. So to keep our learning as generally applicable as possible,
+let’s look at how we can use few-shot learning instead of the built-in function
+calling API to achieve the same results.</p>
+
+<h2 id="non-native-functions">Non-native functions</h2>
+
+<p>Let’s assume we want to build the same solution, but the model we’re working
+with doesn’t have a special way for us to declare functions and the API doesn’t
+have a <code>finish_reason</code> of type <code>function_call</code>. This was precisely the case with
+OpenAI too, up until June 2023. How would we implement our personal assistant in
+this case?</p>
+
+<p>We’ll continue using <code>get_emails()</code> and <code>schedule_meeting()</code> which we
+mock-implemented in the previous section. We will need a different way to
+describe them to the model though. We’ll use one-shot learning for this (to keep
+things simple, few-shot learning would very likely work much better).</p>
+
+<p>Figure 6.3 shows this alternative implementation.</p>
+
+<p><img src="images/06/fig3.png" alt="Figure 6.3"></p>
+
+<p><em>Figure 6.3: Implementing functions using few-shot learning.</em></p>
+
+<p>Assume we can’t use the <code>functions</code> parameter and describe the functions with
+the expected JSON syntax. In this case, we describe each function as a set of
+chat messages: a <code>system</code> message describing the function, and a set of <code>user</code>
+and <code>assistant</code> messages showing example interactions.</p>
+
+<p>We inject all of these in the prompt together with the user ask and send the
+whole thing to the model. Not pictured in figure 6.3, when the model responds,
+this time we won’t get a different <code>finish_reason</code> but if our few-shot learning
+worked correctly, we should be able to tell the model is asking us to call a
+function. Let’s also see how this looks like in code.</p>
+
+<p>Listing 6.10 shows a template that does not rely on the special <code>functions</code>
+syntax, rather describes to the large language model what functions are
+available and shows example invocation and response. We can save this file as
+<code>personal_assistant2.json</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;messages&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are an AI personal assistant. You can call external functions to accomplish tasks or get more information. To call an external function, your respond is only JSON. The return value of the function will be made available to you. Only call the functions described next:&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Function: get_emails - Gets the email addresses of a set of users given their names. Call this if you need to get email addresses when you know names. Arguments: names - array of names as string; returns name to email mapping.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;system&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Function: schedule_meeting - Sends a meeting invitation with the given subject to the given recipient emails at the given time. Arguments: subject - meeting subject as string, recipients - array of emails as string, time - meeting time as string; returns success status.&quot;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Schedule a meeting with Bill Gates for 3 PM, subject: Discuss LLMs&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{ \&quot;name\&quot;: \&quot;get_emails\&quot;, \&quot;args\&quot;: { \&quot;names\&quot;: [\&quot;Bill Gates\&quot;]}&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;get_emails&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{ \&quot;Bill Gates\&quot;: \&quot;billg@microsoft.com\&quot; }&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{ \&quot;name\&quot;: \&quot;schedule_meeting\&quot;, \&quot;args\&quot;: { \&quot;subject\&quot;: \&quot;Discuss LLMs\&quot;, \&quot;recipients\&quot;: [\&quot;billg@microsoft.com\&quot;], \&quot;time\&quot;: \&quot;3 PM\&quot; }&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;user&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;schedule_meeting&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{ \&quot;success\&quot;: true }&quot;</span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Meeting scheduled successfully&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6:10: Functions without special syntax.</em></p>
+
+<p>In this example, we use <code>system</code> messages to describe what is available and
+<code>user</code>/<code>assistant</code> interactions as one-shot learning examples.</p>
+
+<p>Our example describes the two available functions, <code>get_emails()</code> and
+<code>schedule_meeting()</code>, and shows an example of stitching calls to them together
+to accomplish a task. The more examples we provide, the likelier it will be we
+get a syntactically correct answer from the model as a response.</p>
+
+<p>Let’s adapt our chat to not rely on the <code>functions</code> special syntax. Listing 6.11
+shows the updated code.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+
+<span class="k">def</span> <span class="nf">get_emails</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;* Getting emails for </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">address_book</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;John Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;john.doe@example.com&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Jane Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;jane.doe@example.com&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">emails</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">emails</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">address_book</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">emails</span>
+
+
+<span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;* Meeting &#39;</span><span class="si">{</span><span class="n">subject</span><span class="si">}</span><span class="s2">&#39; scheduled for </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">recipients</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">process_function_call</span><span class="p">(</span><span class="n">function_call</span><span class="p">):</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">function_call</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">function_call</span><span class="p">[</span><span class="s1">&#39;args&#39;</span><span class="p">]</span>
+
+    <span class="n">functions</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;get_emails&#39;</span><span class="p">:</span> <span class="n">get_emails</span><span class="p">,</span>
+        <span class="s1">&#39;schedule_meeting&#39;</span><span class="p">:</span> <span class="n">schedule_meeting</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">functions</span><span class="p">[</span><span class="n">name</span><span class="p">](</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="s1">&#39;presonal_assistant2.json&#39;</span><span class="p">)</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;&gt; &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+        <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+
+        <span class="k">if</span> <span class="s1">&#39;get_emails&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span> <span class="ow">or</span> <span class="s1">&#39;schedule_meeting&#39;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+            <span class="n">function_call</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">process_function_call</span><span class="p">(</span><span class="n">function_call</span><span class="p">)</span>
+            <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">function_call</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">result</span><span class="p">)})</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 6.11: Personal assistant chat with functions, no special syntax.</em></p>
+
+<p>We haven’t changed the <code>get_emails()</code> and <code>schedule_meeting()</code> implementations.
+We slightly modified <code>process_function_call()</code> to expect <code>names</code> and <code>args</code> to
+be keys in a dictionary rather than properties on an object.</p>
+
+<p>Instead of looking for <code>function_call</code> in the response, since we’re not using
+that special syntax, we just check if the response contains the name of one of
+our functions. If so, we process the response as a JSON string. We’re again
+skipping any checking for valid JSON and assume the response is correct – we
+wouldn’t make this assumption in a production system, but for our toy example
+this keeps things simple.</p>
+
+<p>We end up with a <code>function_call</code> dictionary populated from parsing the response.
+If the model responded with valid JSON, conforming to what we specified, we
+should have <code>name</code> and <code>args</code> properties we can use in
+<code>process_function_call()</code>.</p>
+
+<p>All of the changes we made are just for replacing the specialized syntax with
+something more generic, which can apply to older models or models provided by
+other vendors - models that don’t support functions natively.</p>
+
+<p>Listing 6.12 shows an example interaction.</p>
+<div class="highlight"><pre><span></span>&gt; Schedule lunch with Jane Doe for Monday at noon at Tipsy Cow
+* Getting emails for [&#39;Jane Doe&#39;]
+* Meeting &#39;Lunch&#39; scheduled for Monday at noon at Tipsy Cow with [&#39;jane.doe@example.com&#39;]
+Lunch with Jane Doe scheduled successfully for Monday at noon at Tipsy Cow.
+</pre></div>
+
+<p><em>Listing 6.12: Example personal assistant interaction.</em></p>
+
+<p>This should be the same as listing 6.10, which is what we want – we were able to
+achieve the same results without relying on the special syntax.</p>
+
+<h3>Conclusions</h3>
+
+<p>So why do we need special syntax again? Because a model trained on it is much
+more likely to provide the expected responses and leverage the functions made
+available to it, with correct syntax. We can achieve similar results, but we
+need to tune our examples and make sure we get the expected results. We might
+need to provide more than one example (few-shot learning).</p>
+
+<p>Ultimately, <code>functions</code> is a more robust way of achieving this. The reason
+OpenAI developed this was to address the common need of having to interact with
+external system and the fact that multiple users and companies ended up devising
+something similar to what we just did to support interactions.</p>
+
+<p>If you are using OpenAI and want to enable a large language model to interact
+with outside systems, use the special syntax if available. If you are using an
+API that does not support this, know there is a way to achieve similar results
+through few-shot learning, instructions, and examples, which you can stick into
+a prompt.</p>
+
+<p>So far we covered a simple scenario: a personal assistant that can schedule
+meetings. What if we want a more capable assistant?</p>
+
+<h2 id="function-libraries">Function libraries</h2>
+
+<p>Let’s say we have a very smart personal assistant. It can not only schedule
+meetings, it can add reminders to our to do list, it can check the weather, it
+can email people on our behalf and so on.</p>
+
+<p>We have a lot of function available to call. We can stick all of them in a
+prompt, but at some point we’ll run into token limits or, at the very least, end
+up consuming way more tokens than we should: if I want my assistant to remind me
+to buy cheese, my prompt shouldn’t also teach it how to schedule meetings and
+email people.</p>
+
+<p>Of course, we know from chapter 5 what to do if we’re worried about token
+limits: use memory. We will store all our available functions in a vector
+database, indexed by description embedding (where description is the
+<code>description</code> property in our function JSON).</p>
+
+<p>Instead of passing all available functions in with a completion call, we can
+instead select a subset of functions which should be most relevant to the user
+ask. And as we saw when discussing memory in chapter 5, relevance is measured by
+cosine distance between embeddings.</p>
+
+<p>Figure 6.4 shows the high-level architecture of such a system.</p>
+
+<p><img src="images/06/fig4.png" alt="Figure 6.4"></p>
+
+<p><em>Figure 6.4: Using a vector database to store function definitions.</em></p>
+
+<p>Here, we have a vector database like Chroma storing all available function definitions.</p>
+
+<ol>
+<li>Based on the input embedding, we query the vector database to retrieve the
+most relevant functions.</li>
+<li>We inject the functions in the prompt, to make the large language model aware
+of them.</li>
+<li>We send the prompt to the model, including the selected functions.</li>
+</ol>
+
+<p>The model will do its best to satisfy the user request, and invoke the provided
+functions as needed. Let’s work through an example.</p>
+
+<p>We’ll start by describing our functions in separate JSON files. Listing 6.13
+shows the JSON corresponding to <code>get_emails()</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;get_emails&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Get the email addresses of a set of users given their names&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;parameters&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;object&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;names&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;array&quot;</span><span class="p">,</span>
+<span class="w">                </span><span class="nt">&quot;items&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;string&quot;</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 6.13: JSON description of get_emails() function.</em></p>
+
+<p>Nothing surprising here – we saw this before, as a subset of our first template,
+in <code>personal_assistant.json</code>.</p>
+
+<p>This JSON file shows up in the book’s code repo under <code>/code/06/functions/</code> as
+<code>get_emails.json</code>. The folder contains several other JSON function descriptions
+for our example, but we won’t list their content here. All of them describe an
+available function. They are:</p>
+
+<ul>
+<li><code>get_emails.json</code> – Gets a set of email addresses given a set of names.</li>
+<li><code>schedule_meeting.json</code> – Sends a meeting invitation with subject and time to
+a set of recipients.</li>
+<li><code>get_weather.json</code> – Gets the current weather in a given city.</li>
+<li><code>set_reminder.json</code> – Sets a reminder.</li>
+</ul>
+
+<p>Let’s stick these in a vector database. If you went through the examples in
+chapter 5, you should have <code>chromadb</code> installed. If not, you can quickly do it
+now with <code>pip install chromadb</code>. We’ll write a small script to index the
+functions by their description and store them in a database.</p>
+
+<p>Listing 6.14 shows the steps.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">chromadb</span>
+<span class="kn">from</span> <span class="nn">chromadb.config</span> <span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">get_embedding</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">Settings</span><span class="p">(</span>
+    <span class="n">chroma_db_impl</span><span class="o">=</span><span class="s1">&#39;duckdb+parquet&#39;</span><span class="p">,</span>
+    <span class="n">persist_directory</span><span class="o">=</span><span class="s1">&#39;functions&#39;</span><span class="p">))</span>
+
+<span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span><span class="s1">&#39;functions&#39;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="s1">&#39;./functions&#39;</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;./functions&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="n">embedding</span> <span class="o">=</span> <span class="n">get_embedding</span><span class="p">(</span><span class="n">func</span><span class="p">[</span><span class="s1">&#39;description&#39;</span><span class="p">])</span>
+
+    <span class="n">collection</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+        <span class="n">documents</span><span class="o">=</span><span class="p">[</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">func</span><span class="p">)],</span>
+        <span class="n">ids</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">],</span>
+        <span class="n">embeddings</span><span class="o">=</span><span class="p">[</span><span class="n">embedding</span><span class="p">])</span>
+
+<span class="n">client</span><span class="o">.</span><span class="n">persist</span><span class="p">()</span>
+</pre></div>
+
+<p><em>Listing 6.14: Storing functions by description embedding.</em></p>
+
+<p>Here’s what’s going on:</p>
+
+<ol>
+<li>We create a <code>chromadb</code> client again using DuckDB and Paquet as the data
+storage format. We’ll save the database in the <code>functions</code> folder.</li>
+<li>We create a <code>functions</code> collection.</li>
+<li>We list all files in the <code>functions</code> subfolder (our JSON function
+definitions), and load each into <code>func</code> using <code>json.load()</code>.</li>
+<li>For each function, unlike chapter 5, where we passed the whole data to
+<code>chromadb</code> and let it compute the embedding, we compute the embedding
+ourselves “manually”, by calling <code>get_embedding()</code> on the <code>description</code>
+property. This ensures we only get the embedding of the function description
+rather than of its name and parameters.</li>
+<li>We add this to the collection using <code>collection.add()</code>. Note besides the
+<code>document</code> (which specifies the data to store in the database) and the <code>id</code>
+(which must be unique in the collection), we also pass in an <code>embedding</code>.
+This tells <code>chromadb</code> to use our provided embedding when storing the
+document.</li>
+<li>Once all functions are added to the collection, we call <code>client.persist()</code> to
+save our database.</li>
+</ol>
+
+<p>The first few steps should be familiar from chapter 5, so we won’t zoom in on
+the details. One interesting change is we’re relying on our on embedding of
+function descriptions rather than letting Chroma embed the documents.</p>
+
+<p>Why did we only embed the descriptions? It’s unlikely that the JSON curly braces
+and function parameters add much to the meaning of the function, which should be
+captured in the description. This way, we embed the tokens which are most
+relevant to our future queries. Remember, the database stores the whole JSON
+content anyway, the embedding is just what it uses to retrieve data: it measures
+the distance between the embedding associated with each document and the
+embedding of the given query.</p>
+
+<p>With the database now saved, let’s implement the final version of our personal
+assistant, which will pull the top 2 relevant functions from the database and
+inject them in the prompt. Listing 6.15 shows this.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">chromadb</span>
+<span class="kn">from</span> <span class="nn">chromadb.utils</span> <span class="kn">import</span> <span class="n">embedding_functions</span>
+<span class="kn">from</span> <span class="nn">chromadb.config</span> <span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">chromadb</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">Settings</span><span class="p">(</span>
+    <span class="n">chroma_db_impl</span><span class="o">=</span><span class="s1">&#39;duckdb+parquet&#39;</span><span class="p">,</span>
+    <span class="n">persist_directory</span><span class="o">=</span><span class="s1">&#39;functions&#39;</span><span class="p">))</span>
+
+<span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_collection</span><span class="p">(</span>
+    <span class="s1">&#39;functions&#39;</span><span class="p">,</span>
+    <span class="n">embedding_function</span><span class="o">=</span><span class="n">embedding_functions</span><span class="o">.</span><span class="n">OpenAIEmbeddingFunction</span><span class="p">(</span>
+        <span class="n">api_key</span><span class="o">=</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">],</span>
+        <span class="n">model_name</span><span class="o">=</span><span class="s2">&quot;text-embedding-ada-002&quot;</span>
+    <span class="p">))</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">(</span>
+    <span class="p">{</span><span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+     <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are an AI personal assistant&#39;</span><span class="p">}],</span>
+     <span class="s1">&#39;functions&#39;</span><span class="p">:</span> <span class="p">[]})</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+
+    <span class="n">functions</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+        <span class="n">query_texts</span><span class="o">=</span><span class="p">[</span><span class="n">prompt</span><span class="p">],</span> <span class="n">n_results</span><span class="o">=</span><span class="mi">2</span><span class="p">)[</span><span class="s1">&#39;documents&#39;</span><span class="p">]</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;functions&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">functions</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+
+    <span class="c1"># ...</span>
+</pre></div>
+
+<p><em>Listing 6.15: Injecting relevant functions from the vector database into the
+prompt.</em></p>
+
+<p>The first part of the code sample creates the <code>chromadb</code> client and loads the
+<code>functions</code> collection. In this case we do configure the collection to use the
+OpenAI embedding API. When we stored the data, we computed the embedding
+ourselves since we didn’t want the embedding of the whole JSON, just of the
+function description. Now we’re not adding anything to the collection, we’re
+just querying it. That is, we need the embedding of the whole user ask, so we
+might as well let <code>chromadb</code> do it. As long as we’re using the same model to
+produce the storage and query embeddings, things should work just fine (and we
+are, we’re using <code>text-embedding-ada-002</code> for both).</p>
+
+<p>Our chat template starts with an empty array of functions.</p>
+
+<p>In the <code>while</code> loop, we append the user prompt to the template message list,
+then we update the <code>functions</code> parameter to use the top 2 <em>nearest</em> functions.
+Again, by nearest we mean smallest cosine distance between the user prompt and
+the function descriptions.</p>
+
+<p>We call <code>collections.query()</code> where the <code>query_texts</code> are the texts to embed and
+find nearest neighbors – we only pass one text in our case, the <code>prompt</code>.
+<code>n_results</code> tells <code>chromadb</code> how many documents to return. We want 2.</p>
+
+<p>We process the result and load the JSON strings for each of these functions into
+the <code>functions</code> array.</p>
+
+<p>Finally, we print the final prompt which we would be sending to the large
+language model.</p>
+
+<p>We won’t implement the rest, as it will be tedious – we would need our function
+calling mechanism and loop which we covered in the first section of this
+chapter. We already know how to do this. What we just learned was how we can
+dynamically modify the functions we make available to the large language model
+based on user input.</p>
+
+<p>If we run the code in listing 6.15, we might get an interaction like listing
+6.16.</p>
+<div class="highlight"><pre><span></span>user: Remind me to buy cheese when I leave work
+{&#39;temperature&#39;: 0, &#39;messages&#39;: [{&#39;role&#39;: &#39;system&#39;, &#39;content&#39;: &#39;You are an AI
+personal assistant&#39;}, {&#39;role&#39;: &#39;user&#39;, &#39;content&#39;: &#39;Remind me to buy cheese when
+I leave work&#39;}], &#39;functions&#39;: [{&#39;name&#39;: &#39;set_reminder&#39;, &#39;description&#39;: &#39;Sets a
+reminder based on location&#39;, &#39;parameters&#39;: {&#39;type&#39;: &#39;object&#39;, &#39;properties&#39;:
+{&#39;reminder&#39;: {&#39;type&#39;: &#39;string&#39;}, &#39;location&#39;: {&#39;type&#39;: &#39;string&#39;}}}}, {&#39;name&#39;:
+&#39;get_weather&#39;, &#39;description&#39;: &#39;Gets the weather given a city name&#39;,
+&#39;parameters&#39;: {&#39;type&#39;: &#39;object&#39;, &#39;properties&#39;: {&#39;city&#39;: {&#39;type&#39;: &#39;string&#39;}}}}]}
+</pre></div>
+
+<p><em>Listing 6.16: Prompt with injected functions based on user ask.</em></p>
+
+<p>For the user ask <em>“remind me to buy cheese when I leave work”</em>, the vector
+database correctly retrieves <code>set_reminder()</code> as the most relevant function.</p>
+
+<p>Looks like the second nearest function is <code>get_weather()</code>, not particularly
+useful in this case, but we did ask for 2 functions.</p>
+
+<p>Of course, we are dealing with simple toy examples. A powerful personal
+assistant would have dozens of functions available, and we would likely inject
+more than 2 with a prompt to ensure it has the right tools at its disposal. The
+overall pattern is the same though: store all available functions in a vector
+database; retrieve them based on embedding distance to user ask. In fact, the
+more functions we have available and the more we want to pull into the prompt
+(while keeping some sane limits), the better results we’ll get.</p>
+
+<p>We just build our first function library!</p>
+
+<p>Before wrapping up, a quick note on embeddings: we said that the embedding we
+use when we insert the documents must be produced by the same model as the
+embedding we use when we query the database. Even though we used our custom
+<code>get_embedding()</code> function, under the hood it calls <code>text-embedding-ada-002</code>.
+That’s the same model we asked Chroma to use when embedding queries. An
+important thing to remember is there is no <em>one true embedding</em> for a piece of
+text. Different models produce different vectors. If we mismatch the storage and
+query models, we end up comparing apples to oranges and we’re guaranteed to have
+surprising results.</p>
+
+<h3>Recap</h3>
+
+<p>Throughout this chapter we built a much more useful solution – a large language
+model-based solution that can interact with external systems.</p>
+
+<p>We started with a bit of non-AI coding and devised a mechanism to convert JSON
+into function calls. This is a crucial piece of infrastructure for this type of
+large language model interaction with external systems.</p>
+
+<p>We used the building blocks from the previous chapters, including calling the
+OpenAI API (which we learned about in chapter 2) and adding relevant data to a
+prompt (which we learned in chapter 3).</p>
+
+<p>As an alternative to the recently (at the time of writing) introduced function
+API, we saw how we can use few-shot learning to achieve similar results (we
+learned about few-shot learning in chapter 4).</p>
+
+<p>Finally, we scaled our solution to any number of available functions, and we
+worked around the large language model limitations by using memory (which we
+learned about in chapter 5).</p>
+
+<p>We were able to tie together all these different aspects of working with large
+language models into an end-to-end solution with new capabilities. Our
+application was again based on interactive chat, as this is a simple way to get
+the point across – we go from user input straight to our system. There are many
+other applications of this, to name a few:</p>
+
+<ul>
+<li>Customer support – where the large language model can integrate with ticketing
+systems and knowledge bases.</li>
+<li>Coding and debugging – where the large language model can interact with the
+IDE or debugger.</li>
+<li>Data analysis and visualization – where the large language model can interact
+with computational and visualization libraries to perform complex calculations
+and generate visualizations.</li>
+<li>Financial analysis and trading – where the large language model can access
+real-time market data and automate trading.</li>
+</ul>
+
+<p>Another very specific example is Copilot generative AI in the Office
+applications. For example, Copilot can now generate an entire PowerPoint
+presentation based on a simple description, including text, images, styles and
+so on. In this case, the large language model interacts with PowerPoint to
+produce content.</p>
+
+<p>In general, a large language model that can interact with external systems is
+orders of magnitude more powerful than a model operating without any connection
+to the outside world.</p>
+
+<p>In the next chapter, we’ll cover planning – getting large language models to
+perform complex, multi-step tasks. This is a different take than a chat
+back-and-forth: we start with a complex goal and let the model figure out how to
+break it down into multiple steps and execute those.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>We can have large language models interact with external systems to
+significantly enhance their capabilities.</li>
+<li>We need a mechanism that takes a JSON description of a function to call and
+arguments and invokes the given function.</li>
+<li>OpenAI now provides a way to describe functions to a large language model and
+have the model ask us to call a function.</li>
+<li>Alternately, we can achieve similar results with few-shot learning, describing
+the functions to the model and providing example invocations.</li>
+<li>This becomes a multi-step interaction: the model first asks us to call a
+function and pass it back the result; it then uses the result to continue
+responding.</li>
+<li>The model might output invalid JSON. We need to be careful to validate output
+(and handle failures from the external systems if they occur).</li>
+<li>If we need to scale, we can store functions in a vector database and retrieve
+them based on how relevant they are to the user ask.</li>
+</ul>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p><a href="https://json-schema.org/understanding-json-schema/">https://json-schema.org/understanding-json-schema/</a>&nbsp;<a href="#fnref1" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn2">
+<p><a href="https://platform.openai.com/docs/guides/gpt/function-calling">https://platform.openai.com/docs/guides/gpt/function-calling</a>&nbsp;<a href="#fnref2" rev="footnote">&#8617;</a></p>
+</li>
+
+</ol>
+</div>
+
+</article>
+<nav>
+<p>
+
+<span>Previous: <a href="memory-and-embeddings.html">Memory and Embeddings</a>. 
+
+
+</p>
+</nav>
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
+</body>
+</html>
