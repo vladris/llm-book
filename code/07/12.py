@@ -27,6 +27,8 @@ chat = ChatTemplate({
             'content': 'You are a large language model generating detailed and granular plans to achieve complex goals. Come up with a multiple step plan that will achieve the given goal. Output these steps as a JSON array with the format {"Thought": <Reasoning behind the step and recall choices>, "Step": <Large language model prompt for the step>, "Recall": [<Useful output of previous steps to make available to this step (maximum 3)>]}.'},
         {'role': 'user', 'content': 'Write a short 3 chapter sci-fi novella on the theme of AI ethics.'},
         {'role': 'assistant', 'content': json.dumps(example_plan)},
-        {'role': 'user', 'content': 'Write a novel consisting of multiple chapters, with a complex plot and multiple characters on the theme of AI ethics.'}]})
+        {'role': 'system',
+            'content': 'You have the following functions you can call: `search_expedia(query)` to search Expedia and `search_kayak(query)` to search Kayak. You can call a function by responding with just the function name and argument. This will give you the response.'},
+        {'role': 'user', 'content': 'Find the cheapest flight from Seattle to Los Angeles and return it to the user.'}]})
 
 print(chat.completion({}).choices[0].message.content)

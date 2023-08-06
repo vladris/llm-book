@@ -1,0 +1,12 @@
+Step 1: Search for flights from Seattle to Los Angeles on Expedia.
+> search_expedia("flights from Seattle to Los Angeles")
+[{"time": "5:30 AM", "airline": "Delta", "price": "$220"}, {"time": "15:00 PM", "airline": "Alaska", "price": "$170"}, {"time": "17:30 PM", "airline": "Delta", "price": "$140"}]
+Step 2: Search for flights from Seattle to Los Angeles on Kayak.
+> search_kayak("flights from Seattle to Los Angeles")
+"Seattle" is not a valid airport code. Did you mean "SEA"?
+> search_kayak("flights from SEA to Los Angeles")
+"Los Angeles" is not a valid airport code. Did you mean "LAX"?
+> search_kayak("flights from SEA to LAX")
+[{"time": "5:30 AM", "airline": "Delta", "price": "$220"}, {"time": "11:00 AM", "airline": "Alaska", "price": "$160"}, {"time": "15:00 PM", "airline": "Alaska", "price": "$170"}]
+Step 3: Compare the results from both searches and return the cheapest flight to the user.
+Final result: [{"time": "17:30 PM", "airline": "Delta", "price": "$140"}]
