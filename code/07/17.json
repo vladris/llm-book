@@ -1,0 +1,4 @@
+[
+    {"Thought": "To find the cheapest flight from Seattle to Los Angeles, I can search Expedia.", "Step": "Step 1: Search for flights from Seattle to Los Angeles on Expedia.", "Recall": []},
+    {"Thought": "To return the cheapest flight to the user, I need to recall the results from the search on Expedia (Step 1).", "Step": "Step 2: Return the cheapest flight from the search on Expedia to the user.", "Recall": ["Step 1"]}
+]
