@@ -1,0 +1,2 @@
+The letter "e" appears a total of 5 times in the names of the days of the week:
+Tuesday, Wednesday, Thursday, Saturday, and Sunday.
