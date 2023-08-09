@@ -36,7 +36,7 @@ chapter_headings = {
     '03': 'Chapter 3: %s',
     '04': 'Chapter 4: %s',
     '05': 'Chapter 5: %s',
-    '06': 'Chapter 5: %s',
+    '06': 'Chapter 6: %s',
 }
 
 # Chapter order
