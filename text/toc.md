@@ -42,7 +42,12 @@
   * [Non-native functions](./interacting-with-external-systems.html#non-native-functions)
   * [Function libraries](./interacting-with-external-systems.html#function-libraries)
   * [Summary](./interacting-with-external-systems.html#summary)
-* Chapter 7: Planning
+* [Chapter 7: Planning](./planning.html)
+  * [Multiple step plans](./planning.html#multiple-step-plans)
+  * [Auto-generated plans](./planning.html#auto-generated-plans)
+  * [Complex steps](./planning.html#complex-steps)
+  * [Adjusting plans](./planning.html#adjusting-plans)
+  * [Summary](./planning.html#summary)
 * Chapter 8: Safety and Security
 * Chapter 9: Frameworks
 * Chapter 10: Final Thoughts
