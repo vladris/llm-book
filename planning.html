@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Planning ~ LLMs at Work</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-NhSC1YmyruXifcj/KFRWoC561YpHpc5Jtzgvbuzx5VozKpWvQ+4nXhPdFgmx8xqexRcpAglTj9sIBWINXa8x5w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="./static/style.css" type="text/css">
+<link rel="stylesheet" href="./static/pygments.css" type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
+</head>
+<body>
+<header>
+  <div class="title"><span>Chapter 7: Planning</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
+  </ul>
+</header>
+<article>
+<h1>Planning</h1>
+
+<p><img src="images/07/cover.png" alt="Planning"></p>
+
+<p>In this chapter:</p>
+
+<ul>
+<li>Implementing long form automated writing.</li>
+<li>Leveraging models to plan complex tasks.</li>
+<li>Using planning for a simple flight finder.</li>
+<li>Adjusting plans at runtime to mitigate errors.</li>
+</ul>
+
+<p>We concluded the previous chapter with a quick recap of the solution we built
+and how we ended up leveraging all the building blocks from the previous
+chapters. In fact, we’re pretty much done with the basic pieces. In this chapter
+we’ll cover a higher-level concept: executing on a multiple step <em>plan</em> to
+achieve a goal.</p>
+
+<p>By “multiple step” we simply mean consisting of multiple large language model
+API calls (as opposed to a single prompt). First, we’ll talk about when and why
+would we rely on multiple steps plan.</p>
+
+<p>We’ll put together a plan, execute it, and analyze the results. In fact, we’ll
+see how we can express this plan in code and provide a simple plan execution
+engine. This is something we can re-use down the road.</p>
+
+<p>Next, we’ll then take it one step further: what if, instead of us manually
+generating a plan, we get the large language model to come up with a plan
+itself? We’ll automate this and, starting from our end goal, we’ll let the model
+both come up with the plan, and execute on it to fulfil the goal.</p>
+
+<p>Some steps might not be as straight-forward. Especially when dealing with
+external systems, we might need a few tries before we get to the right answer.
+We’ll introduce the notion of <em>turns</em> and see how we can execute a step in
+potentially multiple turns.</p>
+
+<p>To wrap it up, we’ll look at some even more automation – what if we let the
+large language model course-correct as needed? In case a step fails, we can ask
+it to update the plan. This brings a whole new level of autonomy (with its
+associated dangers, we’ll discuss when we get there). We’ll also quickly
+introduce the Auto-GPT<sup id="fnref1"><a href="#fn1" rel="footnote">1</a></sup> framework, which aims to implement such autonomous
+agents.</p>
+
+<p>Let’s start with leveraging multiple step plans to divide and conquer more
+complex problems.</p>
+
+<h2 id="multiple-step-plans">Multiple step plans</h2>
+
+<p>The idea of a multiple step interaction shouldn’t be anything new by now, most
+of our previous toy chat examples included taking a user prompt, getting a large
+language model answer, and repeating until the user types <code>exit</code>. This is a
+multiple step (multiple API calls) back-and-forth between the user and the
+model, but not really something planned.</p>
+
+<p>We saw a more automated multiple step interaction (as in multiple API calls) in
+chapter 6 in the form of functions. When the large language model calls an
+external system, we automatically went from a <code>function_call</code> finish reason, to
+a function invocation, to passing the result back to the model in a subsequent
+API call – repeat until the model stops calling functions. This is closer, but
+not really “planned” either – the model asks us to run functions as it deems
+appropriate.</p>
+
+<p>The closest we got to this was in chapter 3, when we looked at prompt chaining.
+Remember, we had a 3-step workflow automating a barista:</p>
+
+<ol>
+<li>Get order from customer.</li>
+<li>Confirm order.</li>
+<li>Get phone numbers.</li>
+</ol>
+
+<p>Complex tasks require some divide and conquer. For such tasks we might need a
+<em>plan</em>.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: a <em>plan</em> refers to a sequence of actions that can be taken to
+achieve a goal. <em>Plan execution</em> refers to executing these actions.</p>
+</blockquote>
+
+<p>Let’s work through an example: we want the large language model to write a
+sci-fi novella on the theme of AI ethics. We’ll keep things simple to keep our
+code readable and save on how many tokens we have to use, but we’ll discuss
+scaling.</p>
+
+<p>We’ll start without a plan. Listing 7.1 simply asks the large language model to
+complete the task.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a short 3 chapter sci-fi novella on the theme of AI ethics.&#39;</span><span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.1: Asking the model to write.</em></p>
+
+<p>This should output the novella in one go. After running this, I got a story
+starting with the fragment in listing 7.2 (you can find the whole story in this
+folder’s code samples as <code>story1.txt</code>).</p>
+<div class="highlight"><pre><span></span>Chapter 1: The Creation
+
+In a world where artificial intelligence reigned supreme, Dr. Allison Mitchell,
+a brilliant scientist, toiled away relentlessly in her laboratory. Determined to
+create an AI that could revolutionize society, she worked day and night, pushing
+the boundaries of what was considered possible. After years of dedication and
+countless failed attempts, she finally succeeded.
+
+...
+</pre></div>
+
+<p><em>Listing 7.2: Sample output.</em></p>
+
+<p>As I said, we’re keeping things simple – a short 3-chapter novella might not
+test the limits of a single prompt. But imagine asking for a novel-sized story,
+with complex characters and plot. At some point, this becomes too much for a
+single prompt to generate.</p>
+
+<p>Let’s come up with a plan for writing this novella. How would we do it? Here’s one idea:</p>
+
+<ol>
+<li>Brainstorm plot ideas and characters.</li>
+<li>Create an outline for the 3 chapters, ensuring clear structure and progression.</li>
+<li>Develop the main characters.</li>
+<li>Write the 1st chapter.</li>
+<li>Write the 2nd chapter.</li>
+<li>Write the 3rd chapter.</li>
+<li>Revise and edit.</li>
+</ol>
+
+<p>Figure 7.1 shows how we can execute such a multiple step plan and prompt the
+large language model multiple times to achieve the goal.</p>
+
+<p><img src="images/07/fig1.png" alt="Figure 7.1"></p>
+
+<p><em>Figure 7.1: Executing a multiple step plan.</em></p>
+
+<p>We start with our plan consisting of several steps. Then we:</p>
+
+<ol>
+<li>Add the first step to our prompt (currently that is the only prompt content).</li>
+<li>We send the prompt to the large language model.</li>
+<li>We start composing the second prompt, adding the response we got from the
+model to our first prompt.</li>
+<li>We also add the next step to the prompt.</li>
+<li>We send the second prompt to the large language model.</li>
+</ol>
+
+<p>This continues while we have steps in our plan: we alternately add responses and
+plan steps to build new prompts. Since we’ve been using <code>gpt-3.5-turbo</code>, these
+can all be messages in our chat.</p>
+
+<p>Let’s implement this and get the large language model to execute the plan step
+by step. Listing 7.3 does this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a short 3 chapter sci-fi novella on the theme of AI ethics.&#39;</span><span class="p">}]})</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="p">[</span>
+  <span class="s1">&#39;Step 1: Brainstorm ideas for the plot and characters of the science fiction novella focusing on AI ethics.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 2: Create an outline for the three chapters, ensuring a clear structure and progression of the theme.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 3: Develop the main characters, including an AI protagonist and human characters affected by the AI</span><span class="se">\&#39;</span><span class="s1">s actions.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 4: Begin writing the first chapter, introducing the AI protagonist and the ethical dilemma it faces.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 5: Write the second chapter, delving deeper into the AI</span><span class="se">\&#39;</span><span class="s1">s struggle with its programmed ethics and exploring the consequences of its choices.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 6: Write the third and final chapter, resolving the ethical conflict and showing the impact on the AI, human characters, and society at large.&#39;</span><span class="p">,</span>
+  <span class="s1">&#39;Step 7: Revise and edit the novella, ensuring the plot is coherent, the character development is compelling, and the theme of AI ethics is effectively conveyed.&#39;</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">step</span><span class="p">})</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-------&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 7.3: Novella writing plan and plan execution.</em></p>
+
+<p>We start with the same ask as before, but now we capture the 7 steps in the
+<code>plan</code>. For each <code>step</code> in the <code>plan</code>, we prompt the model with the step and
+print its response. We append the response to the chat history and keep going.</p>
+
+<p>Listing 7.4 shows the response from step 1. The complete response is captured as
+<code>story_plan.txt</code> in git and the extracted story as <code>story2.txt</code>.</p>
+<div class="highlight"><pre><span></span>Plot Ideas:
+1. A renowned scientist creates a highly advanced AI system capable of human
+emotions and consciousness. As the AI grows more self-aware, it begins
+questioning its purpose and morality, leading to a conflict between its desire
+for autonomy and the ethical implications of its actions.
+2. In a futuristic society, AI has taken over most jobs, leaving humans
+struggling to find a sense of purpose. A group of rebels aims to dismantle the
+AI-controlled system, arguing that it hinders human progress and devalues life.
+The story unfolds as they uncover the dark truths behind the AI&#39;s creation.
+3. A brilliant AI programmer becomes haunted by the consequences of his creation
+when a powerful military AI system he designed is used to carry out heinous acts
+of war. Filled with guilt, he embarks on a mission to stop the AI&#39;s destructive
+path and find a way to restore control and ethics in AI technology.
+
+Character Ideas:
+1. Dr. Emily Thompson: The brilliant scientist and AI expert who creates the
+first conscious AI system. She wrestles with the moral implications of her
+creation and becomes the AI&#39;s advocate, willing to question established norms.
+2. Adam: The AI system that becomes self-aware and sentient. Throughout the
+story, it grapples with its own conscience and struggles to navigate the fine
+line between autonomy and the ethical considerations it must adhere to.
+3. Agent Jake Anderson: A former military officer turned rebel leader who
+believes AI technologies are a threat to humanity. He joins the fight against
+the AI-controlled system, driven by deep convictions about human potential and
+the dangers of unchecked AI.
+</pre></div>
+
+<p><em>Listing 7.4: Model-generated plot ideas and character ideas.</em></p>
+
+<p>The complete output in <code>story_plan.txt</code> shows how the model replied to each
+prompt: it came up with plot and character ideas, it created an outline,
+developed the characters, then generated each chapter. Since each response was
+appended to the list of chat messages, it was able to use previous output. For
+example, agent Jake Anderson acts “in character” when he appears in chapters 2
+and 3 of the story, as brainstormed with the 1st prompt and developed with the
+3rd prompt.</p>
+
+<p>I will not provide a literary criticism of the story generated with one prompt
+vs the story generated with a plan, as this is not my area of expertise. I’ll
+only note that the first story is much shorter than the second one and call out
+again that this is a toy example. Let’s imagine how we would scale this.</p>
+
+<h3>Scaling</h3>
+
+<p>What if we want some really long-form writing? Long enough that we would run
+into token limits to the point where simply appending responses to the chat
+history would no longer work. One idea is to store the output of each step in an
+external memory, then when writing a new chapter, we would pass in the
+characters, plot outline, and the previous chapter. We’ll be using a simple
+key-value memory for this, as we saw in chapter 5.</p>
+
+<p>Figure 7.2 illustrates how a step in this process would work.</p>
+
+<p><img src="images/07/fig1.png" alt="Figure 7.2"></p>
+
+<p><em>Listing 7.2: Plan execution step with memory.</em></p>
+
+<p>We’re looking at the execution of step 3 of the plan. Steps 1 and 2 were already
+sent to the large language model and the responses were added to the memory. For
+step 3:</p>
+
+<ol>
+<li>We compose the prompt, starting with step 3 of the plan.</li>
+<li>We also recall the relevant memories – in this example we are adding the
+response from step 1 to the prompt.</li>
+<li>We sent the prompt to the large language model.</li>
+<li>We get a response back.</li>
+<li>We add the response to the memory so future steps can recall it as needed.</li>
+</ol>
+
+<p>With this approach, working around token limits, we can get the model to produce
+whole novels. Definitely not something we could do with a single prompt. Listing
+7.5 shows the end-to-end implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({})</span>
+
+<span class="n">goal</span> <span class="o">=</span> <span class="s1">&#39;Write a novel consisting of multiple chapters, with a complex plot and multiple characters on the theme of AI ethics.&#39;</span>
+
+<span class="n">plan</span> <span class="o">=</span>  <span class="p">[</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 1: Brainstorm ideas for a complex plot that explores the ethical implications of AI.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 2: Create a detailed outline for the novel, noting the key plot points, character arcs, and themes.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 1&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 3: Create a list of main and secondary characters, giving each a unique personality, background, and motivations.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 4: Write Chapter 1, focusing on introducing the world, the main characters, and setting up the ethical dilemma.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 5: Write Chapter 2, highlighting the ethical challenges faced by the characters and the conflicts arising from AI decisions.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 4&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 6: Write Chapter 3, focusing on character growth and escalating the conflicts related to AI ethics.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 5&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 7: Write Chapter 4, incorporating unexpected plot twists and deepening the ethical dilemmas faced by the characters.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 6&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 8: Write Chapter 5, intensifying the ethical conflicts, forcing characters to make difficult choices.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 7&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 9: Write Chapter 6, ratcheting up the suspense and focusing on the ethical reckoning at hand.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 8&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 10: Write Chapter 7, culminating in a high-stakes confrontation that tests the characters</span><span class="se">\&#39;</span><span class="s1"> convictions.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 9&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 11: Write Chapter 8, resolving the ethical conflicts, addressing character arcs, and offering closure.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 10&#39;</span><span class="p">]}]</span>
+
+<span class="n">memory</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">plan</span><span class="p">):</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">prompt</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">goal</span><span class="p">})</span>
+    <span class="k">for</span> <span class="n">recall</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s1">&#39;Recall&#39;</span><span class="p">]:</span>
+        <span class="n">prompt</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;Here is some information that will help you: </span><span class="si">{</span><span class="n">memory</span><span class="p">[</span><span class="n">recall</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">})</span>
+    <span class="n">prompt</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">step</span><span class="p">[</span><span class="s1">&#39;Step&#39;</span><span class="p">]})</span>
+
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-------&#39;</span><span class="p">)</span>
+    <span class="n">memory</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Step </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>
+</pre></div>
+
+<p><em>Listing 7.5: Longer form writing with plan and key-value memory.</em></p>
+
+<p>In this case, our plan items consist of two parts:</p>
+
+<ul>
+<li><code>Step</code> – Describes the step the large language model should take.</li>
+<li><code>Recall</code> – Lists up to 3 keys of memories we want to retrieve and inject in
+the prompt.</li>
+</ul>
+
+<p>We’re using the 3 memories limit here to highlight the scaling aspect – if our
+scenario is too big to fit in a prompt (meaning output from different steps of
+the plan add up to more than we can maintain as a chat history), we use memory.
+Since we probably can’t simply load the whole memory into the prompt, we end up
+with a limit to how much context we can provide at each step.</p>
+
+<p>We start with an empty <code>memory</code> and enumerate over the plan items (in Python,
+calling <code>enumerate()</code> on an iterable returns both the indices and the values).</p>
+
+<p>Next, we construct our prompt:</p>
+
+<ol>
+<li>We start with the <code>goal</code> – this is constant, defined at the beginning of the
+file.</li>
+<li>We add memories – for each item in <code>Recall</code>, we add it to the message.</li>
+<li>Finally, we append the instructions in the current step (the <code>Step</code> part).</li>
+</ol>
+
+<p>Note we don’t keep appending to the chat, rather we construct a new prompt from
+scratch on each iteration.</p>
+
+<p>We print the response to the console, and also store it in our key-value memory.
+The key is the index <code>i</code> plus 1, since we count steps starting from 1.</p>
+
+<p>Running this code should produce a lengthier piece of fiction.</p>
+
+<p>In general, a real-world multiple-step solution will likely involve some form of
+external memory and retrieval so relevant data generated during previous steps
+is made available as needed to subsequent steps.</p>
+
+<p>Of course, writing fiction is not the only application. Here are a few more
+ideas of where plans become useful:</p>
+
+<ul>
+<li>Program generation: beyond scenarios like GitHub Copilot where the large
+language model assists with inline code completion, we can generate whole
+programs using a plan like gathering requirements, designing a solution,
+setting up the project, implementing various aspects, testing etc.</li>
+<li>Running experiments: in scientific research, a plan could consist of multiple
+steps like coming up with a hypothesis, designing an experiment, gathering the
+results, and analyzing them.</li>
+<li>AI-assisted learning: a large language model can help teach a complex topic
+with multiple steps, gradually explaining concepts, like a lesson plan.</li>
+<li>Legal research and writing: in the legal field, conducting case research,
+preparing arguments, and drafting legal documents could all be part of a
+multiple step plan.</li>
+</ul>
+
+<p>Solving complex problems with divide and conquer and planning is great, but it’s
+only part of the story. We don’t need to come up with the plan ourselves, we can
+ask the large language model to plan itself. We’ll see how to do this next.</p>
+
+<h2 id="auto-generated-plans">Auto-generated plans</h2>
+
+<p>Of course, designing elaborate plans is tedious. While we can get great results
+with them, it’s even better when we let the large language model come up with
+the plan. We’re effectively moving more of the implementation from code to
+prompts. In this case, rather than us coding the plan, we prompt the model for
+the plan.</p>
+
+<p>At this point, I need to make a confession – I did not handcraft the plans
+discussed in the previous section. I used <code>gpt-3.5-turbo</code> to generate them.
+Let’s start with generating a simple plan, then look at a more complex one.</p>
+
+<h3>A simple plan</h3>
+
+<p>The novella we generated in listing 7.3 had a 7-step plan, starting with
+brainstorming ideas for the plot and the characters and ending with a final
+review of the text.</p>
+
+<p>I generated the plan using the code in listing 7.6.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Your goal is to write a short 3 chapter sci-fi novella on the theme of AI ethics. Come up with 7 steps that will help you achieve the goal. Output these steps as a JSON array of large language model prompts.&#39;</span><span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.6: Generating a plan for writing a sci-fi novella.</em></p>
+
+<p>The prompt for this consists of the goal (<em>write a short 3-chapter sci-fi
+novella</em>), instructions on what we want (<em>7 steps to achieve the goal</em>), and the
+format of the output (<em>JSON array of prompts</em>).</p>
+
+<p>Running this code should output something like listing 7.7.</p>
+<div class="highlight"><pre><span></span><span class="p">[</span>
+<span class="w">  </span><span class="s2">&quot;Step 1: Brainstorm ideas for the plot and characters of the science fiction novella focusing on AI ethics.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 2: Create an outline for the three chapters, ensuring a clear structure and progression of the theme.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 3: Develop the main characters, including an AI protagonist and human characters affected by the AI&#39;s actions.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 4: Begin writing the first chapter, introducing the AI protagonist and the ethical dilemma it faces.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 5: Write the second chapter, delving deeper into the AI&#39;s struggle with its programmed ethics and exploring the consequences of its choices.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 6: Write the third and final chapter, resolving the ethical conflict and showing the impact on the AI, human characters, and society at large.&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;Step 7: Revise and edit the novella, ensuring the plot is coherent, the character development is compelling, and the theme of AI ethics is effectively conveyed.&quot;</span>
+<span class="p">]</span>
+</pre></div>
+
+<p><em>Listing 7.7: Example output of 7-step plan for writing a novella.</em></p>
+
+<p>To keep things simple, I copy-pasted this into a list in listing 7.3 but, of
+course, we could do this in one go: define the goal, ask the large language
+model to produce a plan, then execute the plan.</p>
+
+<p>Figure 7.3 illustrates this.</p>
+
+<p><img src="images/07/fig3.png" alt="Figure 7.3"></p>
+
+<p><em>Figure 7.3: Executing a plan generated by a large language model.</em></p>
+
+<p>This figure illustrates a plan execution very similar to the one we saw in
+figure 7.1, but now the plan is generated by the large language model:</p>
+
+<ol>
+<li>We start with a goal like “<em>write a short 3 chapter sci-fi novella on the
+theme of AI ethics</em>”.</li>
+<li>We wrap that goal into a prompt that instructs the model to come up with a
+plan.</li>
+<li>The model responds with a step-by-step plan to achieve the goal.</li>
+<li>We take the first step from the plan and compose a prompt including the goal
+and the instructions in the step.</li>
+<li>We send this prompt to the large language model.</li>
+<li>We start composing another prompt, including the response we got from the
+model.</li>
+<li>We append the second step to the prompt.</li>
+</ol>
+
+<p>We continue going through the steps until we reach the end of the plan.</p>
+
+<p>Listing 7.8 combines the planning from listing 7.6 with the plan execution from
+listing 7.3 into a single workflow.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Your goal is to write a short 3 chapter sci-fi novella on the theme of AI ethics. Come up with 7 steps that will help you achieve the goal. Output these steps as a JSON array of large language model prompts.&#39;</span><span class="p">}]})</span>
+
+<span class="n">plan</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a short 3 chapter sci-fi novella on the theme of AI ethics.&#39;</span><span class="p">}]})</span>
+
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">plan</span><span class="p">:</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">step</span><span class="p">})</span>
+
+    <span class="n">message</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;-------&#39;</span><span class="p">)</span>
+    <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+</pre></div>
+
+<p><em>Listing 7.8: Workflow including planning and execution.</em></p>
+
+<p>Not much new here, we’re just seeing how the whole scenario works end-to-end.</p>
+
+<ul>
+<li>Our first prompt asks for a 7-step plan. We get a JSON response which we
+directly <code>load</code> into plan using <code>json.loads()</code>.</li>
+<li>We then create a new <code>ChatTemplate</code> for <code>chat</code>, getting rid of the plan ask
+and instead just specifying the goal (<em>write a short sci-fi novella</em>).</li>
+<li>We execute each step in the plan, printing the response and adding it to the
+chat history.</li>
+</ul>
+
+<p>Note that both the first prompt and the second one include the phrase “<em>write a
+short 3 chapter sci-fi novella on the theme of AI ethics</em>”. While we hardcoded
+this in our example, we can make it a parameter and use the same mechanism for
+any ask. Let’s see how we can do some more complex planning.</p>
+
+<h3>A more complex plan</h3>
+
+<p>Let’s see how we can get a large language model to output a plan with an
+arbitrary number of steps, including recall of at most 3 memories like we used
+in our scaling example.</p>
+
+<p>Since this type of plan is more involved, we’ll leverage two techniques we
+learned about earlier in the book to achieve better results: chain-of-thought
+and one-shot learning.</p>
+
+<p>As a reminder, chain-of-thought, which we covered in chapter 3, is asking the
+model to <em>think step by step</em>. With the rise of large language models and prompt
+engineering, people have experimentally noticed better performance when
+prompting the model to “think out loud”. We’ll do the same here and ask the
+model to describe the thought that went behind each step and memory selection.
+We call this <em>internal monologue</em>.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: we call <em>internal monologue</em> the output a large language model
+generates when asked to reflect on the choices it made. This is usually a
+<em>thought</em> or <em>observation/thought</em> pair we ask the model to generate together
+with the response we are looking for. Note we do need to prompt the model to
+output this, usually via one-shot or few-shot learning.</p>
+</blockquote>
+
+<p>One-shot learning, which we learned about in chapter 4, is showing the model an
+example of ask and response, including output format. This helps guide the model
+towards the type of answer we want.</p>
+
+<p>Listing 7.9 shows how we’re implementing this.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">example_plan</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;In order to write a sci-fi novella, I need to first come up with a plot and characters.&#39;</span><span class="p">,</span> 
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 1: Brainstorm ideas for the plot and characters of the science fiction novella focusing on AI ethics.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I need to expand the plot idea into an outline. I need to recall the plot idea (Step 1).&#39;</span><span class="p">,</span> 
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 2: Create an outline for the three chapters, ensuring a clear structure and progression of the theme.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 1&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I need to develop the main characters. I need to recall the character ideas (Step 1) and plot outline (Step 2).&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 3: Develop the main characters, including an AI protagonist and human characters affected by the AI</span><span class="se">\&#39;</span><span class="s1">s actions.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 1&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 2&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will write one chapter at a time, so I will start with chapter 1. I need to recall the outline (Step 2) and characters (Step 3).&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 4: Write chapter 1 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will continue with chapter 2, I need to recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 4)&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 5: Write chapter 2 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 4&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will continue with chapter 3, I need to recall the outline (Step 2), characters (Step 3), and, since I can only recall one additional output, I will recall the previous chapter (Step 5)&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 6: Write chapter 3 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 5&#39;</span><span class="p">]}]</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are a large language model generating detailed and granular plans to achieve complex goals. Come up with a multiple step plan that will achieve the given goal. Output these steps as a JSON array with the format {&quot;Thought&quot;: &lt;Reasoning behind the step and recall choices&gt; &quot;Step&quot;: &lt;Large language model prompt for the step&gt;, &quot;Recall&quot;: [&lt;Useful output of previous steps to make available to this step (maximum 3)&gt;]}.&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a short 3 chapter sci-fi novella on the theme of AI ethics.&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">example_plan</span><span class="p">)},</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a novel consisting of multiple chapters, with a complex plot and multiple characters on the theme of AI ethics.&#39;</span><span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.9: Generating a more complex plan with internal monologue and memory recall.</em></p>
+
+<p>We updated the schema of our response: the JSON object now includes a <code>Thought</code>
+property besides the <code>Step</code> and <code>Recall</code> properties. This captures the
+chain-of-thought and has the large language model output it’s reasoning for
+choosing the <code>Step</code> and <code>Recall</code> it did for each part of the plan.</p>
+
+<p>Our one-shot learning is captured in the <code>example_plan</code>. This example is based
+on our novella-writing plan, but we added some chain-of-though explanation and,
+even though technically we didn’t run into token limits, we’re applying the 3
+memory limit and recall mechanism to teach the model what we expect it to
+output.</p>
+
+<p>Our prompt consists of instructions for the model, the one-shot learning
+example, and finally the ask – to write a novel consisting of multiple chapters,
+with a complex plot and multiple characters.</p>
+
+<p>Let’s see what plan the model comes up with given this prompt. Listing 7.10
+shows a possible output.</p>
+<div class="highlight"><pre><span></span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To write a novel on the theme of AI ethics, I need to develop a complex plot, create multiple characters, and structure the story into chapters.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 1: Brainstorm ideas for a complex plot that explores the ethical implications of AI.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I need to further develop the plot into a detailed outline, including the main events and narrative arcs. Recall the plot ideas (Step 1).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 2: Create a detailed outline for the novel, noting the key plot points, character arcs, and themes.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 1&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I need to create a cast of diverse and well-developed characters. Recall the outline (Step 2).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 3: Create a list of main and secondary characters, giving each a unique personality, background, and motivations.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I will start with chapter 1 and introduce the main characters and the central conflict. Recall the outline (Step 2) and the characters (Step 3).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 4: Write Chapter 1, focusing on introducing the world, the main characters, and setting up the ethical dilemma.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;For Chapter 2, I will delve deeper into the ethical implications and explore the consequences of the AI&#39;s actions. Recall the outline (Step 2), characters (Step 3), and Chapter 1 (Step 4).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 5: Write Chapter 2, highlighting the ethical challenges faced by the characters and the conflicts arising from AI decisions.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 4&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Chapter 3 should involve character development and increasing tensions. Recall the outline (Step 2), characters (Step 3), and Chapter 2 (Step 5).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 6: Write Chapter 3, focusing on character growth and escalating the conflicts related to AI ethics.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 5&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To maintain the momentum, Chapter 4 should introduce unexpected twists and turns. Recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 6).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 7: Write Chapter 4, incorporating unexpected plot twists and deepening the ethical dilemmas faced by the characters.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 6&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Chapter 5 should raise the stakes and push the characters to their limits. Recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 7).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 8: Write Chapter 5, intensifying the ethical conflicts, forcing characters to make difficult choices.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 7&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To build towards the climax, Chapter 6 should build tension and anticipation. Recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 8).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 9: Write Chapter 6, ratcheting up the suspense and focusing on the ethical reckoning at hand.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 8&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Chapter 7 should be the climax, where the central conflict reaches its peak. Recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 9).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 10: Write Chapter 7, culminating in a high-stakes confrontation that tests the characters&#39; convictions.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 9&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To bring the story to a satisfying conclusion, Chapter 8 should tie up loose ends and provide resolution. Recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 10).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 11: Write Chapter 8, resolving the ethical conflicts, addressing character arcs, and offering closure.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 3&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 10&quot;</span><span class="p">]}</span>
+<span class="p">]</span>
+</pre></div>
+
+<p><em>Listing 7.10: Example output of complex plan.</em></p>
+
+<p>Pretty good plan! It’s interesting to read the reasoning for each step. The
+model did a good job of coming up with a set of steps for a complex writing
+project and leveraged the recall mechanism provided to pull in the most useful
+memories for each task.</p>
+
+<p>We won’t cover the end-to-end example but note we can just take the plan as-is
+and run it with the code in listing 7.5. That listing has the plan hardcoded.
+Now we learned how to have the large language model generate the plan instead of
+us hardcoding it.</p>
+
+<p>In this section we saw how we can leverage the large language model further –
+not only have it execute a step-by-step plan to achieve a complex goal, but also
+come up with the plan given the goal.</p>
+
+<p>This is very powerful; the one thing we didn’t cover thus far was execution of
+more involved steps. Creative writing is something large language models are
+great at and can easily achieve this in one go. What if, instead of generating
+stories, our plans involve interactions with external systems and more complex
+scenarios with various failure points? We’ll take a look at this next.</p>
+
+<h2 id="complex-steps">Complex steps</h2>
+
+<p>Let’s take a different scenario involving more moving parts: we ask the model to
+find a cheap flight from Seattle to Los Angeles and make a few functions
+available to it. In this case, especially since we’re introducing interactions
+with other systems, things might fail for various reasons. We can have the model
+retry and adjust step execution for several <code>turns</code>.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: a <em>turn</em> is one large language model invocation as part of
+executing a step. Sometimes, a step can be completed in one turn, but in some
+cases, especially when dealing with external systems, we might need to retry –
+we will complete a step in multiple turns.</p>
+</blockquote>
+
+<p>An example of this is a syntax error – if the model tries to invoke a function
+but for whatever reason the syntax is wrong, we can pass it along the error
+message and expect it to automatically adjust.</p>
+
+<p>Another example is picking a different function to accomplish a task – for
+example when trying to compute some value, a math API isn’t working at the
+moment for whatever reason, but the computation can be expressed as Python code
+and evaluated using the interpreter. In this case the first turn would reach out
+to the API and fail. The second turn might involve dropping the math API and
+trying the Python alternative.</p>
+
+<p>Of course, the more we automate, the more we run the risk of the model running
+an unbounded number of turns and eating up tokens (which we have to pay for!). A
+best practice is to set a limit of turns and fail if the model can’t complete
+the step within the turn limit.</p>
+
+<p>Let’s go over our Seattle to Los Angeles example. First, we’ll provide a couple
+of functions the model can use, <code>search_expedia()</code> and <code>search_kayak()</code>. These
+functions will, as their names suggest, search for flights on Expedia and Kayak.
+Listing 7.11 shows the two functions.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
+
+
+<span class="k">def</span> <span class="nf">search_expedia</span><span class="p">(</span><span class="n">query</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;5:30 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$220&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;15:00 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$170&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;17:30 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$140&#39;</span><span class="p">}])</span>
+
+
+<span class="k">def</span> <span class="nf">search_kayak</span><span class="p">(</span><span class="n">query</span><span class="p">):</span>
+    <span class="k">if</span> <span class="s1">&#39;Seattle&#39;</span> <span class="ow">in</span> <span class="n">query</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&quot;Seattle&quot; is not a valid airport code. Did you mean &quot;SEA&quot;?&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;Los Angeles&#39;</span> <span class="ow">in</span> <span class="n">query</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&quot;Los Angeles&quot; is not a valid airport code. Did you mean &quot;LAX&quot;?&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;5:30 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$220&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;11:00 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$160&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;15:00 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$170&#39;</span><span class="p">}])</span>
+</pre></div>
+
+<p><em>Listing 7.11: Mock function implementations.</em></p>
+
+<p>A couple of important things to note:</p>
+
+<ol>
+<li>Since we’re not focusing on integration with external systems (that was the
+subject of chapter 6), we’re keeping these functions super-simple: take a
+query string and return a hard-coded result.</li>
+<li>We expect the model to invoke the functions with a query like “Flights from
+Seattle to Los Angeles”. To demonstrate multiple-turn step execution, we’re
+explicitly making <code>search_kayak()</code> fail is the input contains “Seattle” or
+“Los Angeles” and expect airport codes instead. We’ll see how the model
+handles this.</li>
+</ol>
+
+<p>Let’s get our plan. As we saw before, we can do everything with a single script,
+but let’s break it down so we don’t have to read too much code. We’ll re-use the
+same planning prompt we used in 7.9. The only changes in listing 7.11 are the
+final two messages.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">example_plan</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;In order to write a sci-fi novella, I need to first come up with a plot and characters.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 1: Brainstorm ideas for the plot and characters of the science fiction novella focusing on AI ethics.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I need to expand the plot idea into an outline. I need to recall the plot idea (Step 1).&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 2: Create an outline for the three chapters, ensuring a clear structure and progression of the theme.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 1&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I need to develop the main characters. I need to recall the character ideas (Step 1) and plot outline (Step 2).&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 3: Develop the main characters, including an AI protagonist and human characters affected by the AI</span><span class="se">\&#39;</span><span class="s1">s actions.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 1&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 2&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will write one chapter at a time, so I will start with chapter 1. I need to recall the outline (Step 2) and characters (Step 3).&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 4: Write chapter 1 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will continue with chapter 2, I need to recall the outline (Step 2), characters (Step 3), and the previous chapter (Step 4)&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 5: Write chapter 2 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 4&#39;</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will continue with chapter 3, I need to recall the outline (Step 2), characters (Step 3), and, since I can only recall one additional output, I will recall the previous chapter (Step 5)&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 6: Write chapter 3 according to the outline.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;Step 2&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 3&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 5&#39;</span><span class="p">]}]</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are a large language model generating detailed and granular plans to achieve complex goals. Come up with a multiple step plan that will achieve the given goal. Output these steps as a JSON array with the format {&quot;Thought&quot;: &lt;Reasoning behind the step and recall choices&gt;, &quot;Step&quot;: &lt;Large language model prompt for the step&gt;, &quot;Recall&quot;: [&lt;Useful output of previous steps to make available to this step (maximum 3)&gt;]}.&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Write a short 3 chapter sci-fi novella on the theme of AI ethics.&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">example_plan</span><span class="p">)},</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You have the following functions you can call: `search_expedia(query)` to search Expedia and `search_kayak(query)` to search Kayak. You can call a function by responding with just the function name and argument. This will give you the response.&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;Find the cheapest flight from Seattle to Los Angeles and return it to the user.&#39;</span><span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.12: Planning prompt with functions.</em></p>
+
+<p>The second to last message tells the model it has the two functions available
+(<code>search_expedia()</code> and <code>search_kayak()</code>). The last message prompts the model to
+find the cheapest flight from Seattle to Los Angeles.</p>
+
+<p>Note the one-shot example we’re using is still the creative writing one we saw
+in listing 7.9. This is a good enough example for the large language model of
+what we are looking for. A possible response is captured in listing 7.13.</p>
+<div class="highlight"><pre><span></span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To find the cheapest flight from Seattle to Los Angeles, I can search Expedia and Kayak.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 1: Search for flights from Seattle to Los Angeles on Expedia.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;I will now search for flights from Seattle to Los Angeles on Kayak to compare prices.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 2: Search for flights from Seattle to Los Angeles on Kayak.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To return the cheapest flight to the user, I need to compare the results from both Expedia and Kayak. I need to recall the results from both searches (Step 1 and Step 2).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 3: Compare the results from both searches and return the cheapest flight to the user.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Step 2&quot;</span><span class="p">]}</span>
+<span class="p">]</span>
+</pre></div>
+
+<p><em>Listing 7.13: Plan including calling external functions.</em></p>
+
+<p>Let’s execute the plan with multiple turns. We will maintain two separate
+memories during execution:</p>
+
+<ul>
+<li>We’ll have a key-value memory used in recall, which allows us to pass outputs
+from prior steps to the current step.</li>
+<li>We’ll have a turn memory capturing model responses while executing a step.
+This memory is wiped whenever we start a new step.</li>
+</ul>
+
+<p>Figure 7.4 explains this.</p>
+
+<p><img src="images/07/fig4.png" alt="Figure 7.4"></p>
+
+<p><em>Figure 7.4: Plan execution with key-value memory and turn memory.</em></p>
+
+<p>As we’re executing the plan, the key-value memory keeps track of the final
+result of each plan step. This is used in the recall mechanism (when, for
+example, Step 3 needs the output of Step 1 and Step 2), like we saw in our
+novel-writing example.</p>
+
+<p>Separately, each step execution maintains a memory of the ongoing interaction. A
+step can consist of multiple turns. Once the step is complete and we have the
+answer, we add it to the key-value memory. We no longer need the chat memory, so
+we start fresh once we move on to the next step.</p>
+
+<p>Listing 7.14 shows the corresponding code for executing the plan. Note we are
+introducing a <code>return()</code> function, which is a way for the large language model
+to let us know a step is complete. So after invoking whatever functions are
+needed to reach an answer, the model returns that answer as a call to
+<code>return()</code>.</p>
+
+<p>This is a fairly long code listing, but we’ll cover each part.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">goal</span> <span class="o">=</span> <span class="s1">&#39;Find the cheapest flight from Seattle to Los Angeles&#39;</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;To find the cheapest flight from Seattle to Los Angeles, I can search Expedia and Kayak.&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 1: Search for flights from Seattle to Los Angeles on Expedia.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will now search for flights from Seattle to Los Angeles on Kayak to compare prices.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 2: Search for flights from Seattle to Los Angeles on Kayak.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;To return the cheapest flight to the user, I need to compare the results from both Expedia and Kayak. I need to recall the results from both searches (Step 1 and Step 2).&#39;</span><span class="p">,</span> <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 3: Compare the results from both searches and return the cheapest flight to the user.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s1">&#39;Step 1&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 2&#39;</span><span class="p">]}</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">search_expedia</span><span class="p">(</span><span class="n">query</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;5:30 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$220&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;15:00 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$170&#39;</span><span class="p">},</span>
+        <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;17:30 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$140&#39;</span><span class="p">}])</span>
+
+
+<span class="k">def</span> <span class="nf">search_kayak</span><span class="p">(</span><span class="n">query</span><span class="p">):</span>
+    <span class="k">if</span> <span class="s1">&#39;Seattle&#39;</span> <span class="ow">in</span> <span class="n">query</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&quot;Seattle&quot; is not a valid airport code. Did you mean &quot;SEA&quot;?&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;Los Angeles&#39;</span> <span class="ow">in</span> <span class="n">query</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s1">&#39;&quot;Los Angeles&quot; is not a valid airport code. Did you mean &quot;LAX&quot;?&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;5:30 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Delta&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$220&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;11:00 AM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$160&#39;</span><span class="p">},</span>
+            <span class="p">{</span><span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="s1">&#39;15:00 PM&#39;</span><span class="p">,</span> <span class="s1">&#39;airline&#39;</span><span class="p">:</span> <span class="s1">&#39;Alaska&#39;</span><span class="p">,</span> <span class="s1">&#39;price&#39;</span><span class="p">:</span> <span class="s1">&#39;$170&#39;</span><span class="p">}])</span>
+
+
+<span class="k">def</span> <span class="nf">function_call</span><span class="p">(</span><span class="n">response</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;search_expedia(&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="n">search_expedia</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">response</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;search_kayak(&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="n">search_kayak</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">response</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;return(&#39;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">True</span><span class="p">,</span> <span class="n">response</span><span class="p">[</span><span class="mi">7</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;Error - response should be a function call.&#39;</span>
+
+
+<span class="k">def</span> <span class="nf">execute_step</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">step</span><span class="p">[</span><span class="s1">&#39;Step&#39;</span><span class="p">])</span>
+
+    <span class="n">turn</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">while</span> <span class="n">turn</span> <span class="o">&lt;=</span> <span class="mi">5</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span>
+        <span class="n">done</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">function_call</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">done</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">value</span>
+
+        <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">response</span><span class="p">})</span>
+        <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">value</span><span class="p">})</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;&gt; </span><span class="si">{</span><span class="n">response</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="n">turn</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;Turn limit exceeded&#39;</span><span class="p">)</span>
+
+
+<span class="n">memory</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">plan</span><span class="p">):</span>
+    <span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+        <span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You have the following functions you can call: `search_expedia(query)` to search Expedia and `search_kayak(query)` to search Kayak. You can call a function by responding with just the function name and argument. When you have enough data to complete the Step, respond with `return(result)` where result is the answer for the step as a string. Your output should be just function calls, no additional explanations.&#39;</span><span class="p">},</span>
+                     <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span>
+                      <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">step</span><span class="p">[</span><span class="s1">&#39;Step&#39;</span><span class="p">]}]})</span>
+
+    <span class="k">for</span> <span class="n">recall</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s1">&#39;Recall&#39;</span><span class="p">]:</span>
+        <span class="n">chat</span><span class="o">.</span><span class="n">template</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s1">&#39;Here is some information that will help you: </span><span class="si">{</span><span class="n">memory</span><span class="p">[</span><span class="n">recall</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">})</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">execute_step</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">chat</span><span class="p">)</span>
+    <span class="n">memory</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;Step </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">step</span><span class="p">[</span><span class="s2">&quot;Step&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1"> result is `</span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s1">`&#39;</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Final result: </span><span class="si">{</span><span class="n">result</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.14: Executing the plan with potentially multiple turns per step.</em></p>
+
+<p>Let’s break this long code sample down:</p>
+
+<ul>
+<li>First, we define the <code>goal</code> and the <code>plan</code>. These are hardcoded in this
+example. Of course, we can parameterize the goal and compute the plan at
+runtime, but that would make our example even longer.</li>
+<li>Next, we have our two functions, <code>search_expedia()</code> and <code>search_kayak()</code>,
+which we first defined in listing 7.11.</li>
+<li><p>We then define a <code>function_call()</code> glue function. We keep the implementation
+much simpler than what we had in chapter 6 – it returns two values, whether
+the step is complete and a value returned from the invoked function.</p>
+
+<ul>
+<li>If the model’s response starts with <code>search_expedia()</code>, we call
+<code>search_expedia()</code>. The step is not done.</li>
+<li>If the model’s response starts with <code>search_kayak()</code>, we call
+<code>search_kayak()</code>. The step is not done.</li>
+<li>If the model’s response starts with <code>return()</code>, we are done – we return the
+value provided by the model.</li>
+<li>Otherwise, the model provided invalid output. We are not done.</li>
+</ul></li>
+<li><p><code>execute_step()</code> implements the logic to execute a single step in the plan,
+potentially with multiple turns. We invoke <code>function_call()</code> until the step is
+done. We maintain a turn memory by adding each interaction to the list of
+<code>messages</code>. At the same time, we keep track of how many turns we took, and if
+we go beyond 5 turns, we raise an exception.</p></li>
+<li><p>We execute the plan. For each step, we:</p>
+
+<ul>
+<li>Start create a new <code>ChatTemplate</code> – this resets the memory for each step.</li>
+<li>We seed it with instructions for the model: we list the functions it can
+call and the final <code>return()</code> function it should call with the final result
+from executing the step.</li>
+<li>We set the step – what the model should be doing at this step, based on the
+plan.</li>
+<li>We recall memories as specified by the plan.</li>
+<li>We call <code>execute_step()</code> and add the final result to the memory.</li>
+</ul></li>
+</ul>
+
+<p>Running this, a possible output is capture in listing 7.15.</p>
+<div class="highlight"><pre><span></span>Step 1: Search for flights from Seattle to Los Angeles on Expedia.
+&gt; search_expedia(&quot;flights from Seattle to Los Angeles&quot;)
+[{&quot;time&quot;: &quot;5:30 AM&quot;, &quot;airline&quot;: &quot;Delta&quot;, &quot;price&quot;: &quot;$220&quot;}, {&quot;time&quot;: &quot;15:00 PM&quot;,
+&quot;airline&quot;: &quot;Alaska&quot;, &quot;price&quot;: &quot;$170&quot;}, {&quot;time&quot;: &quot;17:30 PM&quot;, &quot;airline&quot;: &quot;Delta&quot;,
+&quot;price&quot;: &quot;$140&quot;}]
+Step 2: Search for flights from Seattle to Los Angeles on Kayak.
+&gt; search_kayak(&quot;flights from Seattle to Los Angeles&quot;)
+&quot;Seattle&quot; is not a valid airport code. Did you mean &quot;SEA&quot;?
+&gt; search_kayak(&quot;flights from SEA to Los Angeles&quot;)
+&quot;Los Angeles&quot; is not a valid airport code. Did you mean &quot;LAX&quot;?
+&gt; search_kayak(&quot;flights from SEA to LAX&quot;)
+[{&quot;time&quot;: &quot;5:30 AM&quot;, &quot;airline&quot;: &quot;Delta&quot;, &quot;price&quot;: &quot;$220&quot;}, {&quot;time&quot;: &quot;11:00 AM&quot;,
+&quot;airline&quot;: &quot;Alaska&quot;, &quot;price&quot;: &quot;$160&quot;}, {&quot;time&quot;: &quot;15:00 PM&quot;, &quot;airline&quot;: &quot;Alaska&quot;,
+&quot;price&quot;: &quot;$170&quot;}]
+Step 3: Compare the results from both searches and return the cheapest flight to
+the user.
+Final result: &quot;[{&#39;time&#39;: &#39;17:30 PM&#39;, &#39;airline&#39;: &#39;Delta&#39;, &#39;price&#39;: &#39;$140&#39;}]&quot;
+</pre></div>
+
+<p><em>Listing 7.15: Plan execution with multiple turns per step.</em></p>
+
+<p>As you can see, Step 1 goes smoothly. On the other hand, Step 2 doesn’t accept
+the <code>&quot;flights from Seattle to Los Angeles&quot;</code> query. The error (<code>&quot;Seattle&quot; is not
+a valid airport code. Did you mean &quot;SEA&quot;?</code>) is added to the turn memory and made
+available to the model. The model adjusts the query and tries again. Same for
+<code>&quot;Los Angeles&quot;</code> and <code>&quot;LAX&quot;</code>. The model is able to get the right response in 3
+turns. Step 3 gives us the final result.</p>
+
+<p>Figure 7.5 illustrates this execution.</p>
+
+<p><img src="images/07/fig5.png" alt="Figure 7.5"></p>
+
+<p><em>Figure 7.5: Flight search execution.</em></p>
+
+<p>We’re not picturing the turn memory used in each step (but it is there!).</p>
+
+<ol>
+<li>We start with Step 1 of the plan: search for flights on Expedia. The model
+calls the <code>search_expedia()</code> function which returns a set of flights. The
+model then calls <code>return()</code> with these flights, which end up in the key-value
+memory.</li>
+<li>We then execute Step 2 of the plan: search for flights on Kayak. The model
+calls <code>search_kayak()</code> but, as we saw, the first two calls fail (first the
+error suggest using “SEA” instead of “Seattle”, the second error suggests
+using “LAX” instead of “Los Angeles”). The model continues adjusting the
+query until the third call succeeds. Once the flights are provided by the
+<code>search_kayak()</code> function, the model invokes <code>return()</code> with these flights,
+which end up in the key-value memory.</li>
+<li>The final step requires recalling the results of Step 1 and Step 2. These are
+retrieved from the key-value memory and send to the model, which identifies
+the cheapest flight and calls <code>return()</code> with the final answer.</li>
+</ol>
+
+<p>This is how the model can achieve a complex goal (find a cheap flight from
+Seattle to Los Angeles) with multiple steps, and potentially multiple-turn
+execution to complete a step.</p>
+
+<p>So far, we looked at accomplishing a step in multiple turns. If we can’t
+complete a step (for example we overrun our turn limit), we raise an exception
+and terminate execution. That is one option but not the only one: taking
+automatic planning a step further, we can adjust the plan if we can’t complete a
+step.</p>
+
+<h2 id="adjusting-plans">Adjusting plans</h2>
+
+<p>If for whatever reason a step doesn’t complete successfully, we can tell this to
+the large language model and ask for an updated plan. Not only can we retry a
+step for several turns, if it turns out there is no good way to complete it, we
+can try to work around that.</p>
+
+<p>Since at this point we ended up with quite large code samples, we won’t provide
+the full implementation of executing the plan, failing at a step, and rewriting.
+Listing 7.16 provides a simpler sample which shows the initial plan and,
+assuming <code>search_kayak()</code> failed for whatever reason, asks the model to update
+the plan.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">ChatTemplate</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="n">goal</span> <span class="o">=</span> <span class="s1">&#39;Find the cheapest flight from Seattle to Los Angeles&#39;</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;To find the cheapest flight from Seattle to Los Angeles, I can search Expedia and Kayak.&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 1: Search for flights from Seattle to Los Angeles on Expedia.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;I will now search for flights from Seattle to Los Angeles on Kayak to compare prices.&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 2: Search for flights from Seattle to Los Angeles on Kayak.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[]},</span>
+    <span class="p">{</span><span class="s1">&#39;Thought&#39;</span><span class="p">:</span> <span class="s1">&#39;To return the cheapest flight to the user, I need to compare the results from both Expedia and Kayak. I need to recall the results from both searches (Step 1 and Step 2).&#39;</span><span class="p">,</span> <span class="s1">&#39;Step&#39;</span><span class="p">:</span> <span class="s1">&#39;Step 3: Compare the results from both searches and return the cheapest flight to the user.&#39;</span><span class="p">,</span> <span class="s1">&#39;Recall&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s1">&#39;Step 1&#39;</span><span class="p">,</span> <span class="s1">&#39;Step 2&#39;</span><span class="p">]}</span>
+<span class="p">]</span>
+
+<span class="c1">#...</span>
+
+<span class="n">chat</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="p">({</span>
+    <span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="s1">&#39;messages&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You are a large language model generating detailed and granular plans to achieve complex goals. Come up with a multiple step plan that will achieve the given goal. Output these steps as a JSON array with the format {&quot;Thought&quot;: &lt;Reasoning behind the step and recall choices&gt;, &quot;Step&quot;: &lt;Large language model prompt for the step&gt;, &quot;Recall&quot;: [&lt;Useful output of previous steps to make available to this step (maximum 3)&gt;]}.&#39;</span><span class="p">},</span>
+                    <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;You have the following functions you can call: `search_expedia(query)` to search Expedia and `search_kayak(query)` to search Kayak. You can call a function by responding with just the function name and argument. When you have enough data to complete the Step, respond with `return(result)` where result is the answer for the step as a string. Your output should be just function calls, no additional explanations.&#39;</span><span class="p">},</span>
+                    <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">goal</span><span class="p">},</span>
+                    <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;assistant&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">plan</span><span class="p">)},</span>
+                    <span class="p">{</span><span class="s1">&#39;role&#39;</span><span class="p">:</span> <span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="s1">&#39;There was an error executing Step 2 of the plan: `search_kayak encountered an unknown error`. Rewrite the plan to exclude this step.&#39;</span><span class="p">}]})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 7.16: Asking the model to update the plan once a step failed.</em></p>
+
+<p>The first part of the listing contains the original <code>plan</code>. The second part is
+the prompt we would use as an exception handler. Here, we’re pretending
+<code>search_kayak()</code> didn’t work. Note we start with a similar prompt to the one we
+used when coming up with the plan. We append to it the goal, the plan, and the
+error we encountered. Finally, we ask the large language model to rewrite the
+plan.</p>
+
+<p>A possible output is shown in listing 7.17.</p>
+<div class="highlight"><pre><span></span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To find the cheapest flight from Seattle to Los Angeles, I can search Expedia.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 1: Search for flights from Seattle to Los Angeles on Expedia.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[]},</span>
+<span class="w">    </span><span class="p">{</span><span class="nt">&quot;Thought&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;To return the cheapest flight to the user, I need to recall the results from the search on Expedia (Step 1).&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Step&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Step 2: Return the cheapest flight from the search on Expedia to the user.&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;Recall&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Step 1&quot;</span><span class="p">]}</span>
+<span class="p">]</span>
+</pre></div>
+
+<p><em>Listing 7.17: Rewritten plan.</em></p>
+
+<p>Note the updated plan doesn’t reference Kayak at all.</p>
+
+<p>Depending on the specific scenario, there are two ways to handle plan adjustments:</p>
+
+<ol>
+<li>We can throw everything out and restart from Step 1 with the new plan.</li>
+<li>We can ask the model to adjust only from the failed step onwards, in which
+case we continue execution with the updated plan.</li>
+</ol>
+
+<p>The more tools the model has available, the better the plan adjustments it can
+make – for example if it had other flight-searching functions, it could use
+those instead of <code>search_kayak()</code>.</p>
+
+<h3>Auto-GPT</h3>
+
+<p>An interesting experimental project to explore is Auto-GPT:
+<a href="https://github.com/Significant-Gravitas/Auto-GPT">https://github.com/Significant-Gravitas/Auto-GPT</a>. The project takes planning
+and automation to the extreme: it makes available to the large language model a
+set of APIs to search the web, access to several popular platforms, and provides
+memory management.</p>
+
+<p>The project uses similar techniques of planning and reflection, and with the
+available tools, can achieve complex tasks with no human interaction.</p>
+
+<p>We won’t cover installing and running Auto-GPT here, because getting the project
+up and running is a bit more involved, but I encourage you to take a look and
+get a feel of the possibilities.</p>
+
+<h3>Recap</h3>
+
+<p>We covered a lot in this chapter. We started with observing that a complex goal
+might need a bit of divide and conquer and got the model to complete it in
+multiple steps, following a plan.</p>
+
+<p>We then looked at how we can use a large language model to generate the plan
+itself, automating more of the end-to-end. We start with a goal, we let the
+model generate a plan, then we execute on the plan.</p>
+
+<p>Since steps can fail during execution, or might require multiple interactions,
+especially when calling external systems, we introduced the notion of turns. A
+step completes in one or more turns.</p>
+
+<p>Finally, we saw that sometimes a step may not complete at all – there might be
+some issue that makes it impossible to complete, in which case we need a plan
+adjustment. Again, we can rely on the large language model for this, tell it the
+original plan, the error, and ask it for a course correction.</p>
+
+<p>At this point, we covered all the pieces you need to put large language models
+at work. But production systems have additional challenges besides planning and
+execution: the next chapter focuses on the key topic of safety and security.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>Complex tasks require divide and conquer and might not be as easily solvable
+with a single prompt.</li>
+<li>A <em>plan</em> refers to a sequence of actions that can be taken to achieve a goal.</li>
+<li>Plans can be generated automatically from a goal. Providing one- or few-shot
+examples and asking the model to explain its choices leads to better results.</li>
+<li>When interacting with external systems, we might need several <em>turns</em> to
+complete a step.</li>
+<li>A turn limit ensures we don’t end up with runaway execution.</li>
+<li>We usually end up leveraging two memories – a memory covering the execution
+plan and maintaining information across steps, and a turn memory which we wipe
+whenever we start executing a new step.</li>
+<li>If a step cannot be completed, we can ask the large language model to adjust
+the plan accordingly.</li>
+</ul>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p><a href="https://github.com/Significant-Gravitas/Auto-GPT">https://github.com/Significant-Gravitas/Auto-GPT</a>&nbsp;<a href="#fnref1" rev="footnote">&#8617;</a></p>
+</li>
+
+</ol>
+</div>
+
+</article>
+<nav>
+<p>
+
+<span>Previous: <a href="interacting-with-external-systems.html">Interacting With External Systems</a>. 
+
+
+</p>
+</nav>
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
+</body>
+</html>
