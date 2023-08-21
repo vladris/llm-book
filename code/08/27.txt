@@ -1,0 +1,6 @@
+ask: Who created Indiana Jones?
+Indiana Jones was created by George Lucas and Steven Spielberg. George Lucas came up with the concept of the character, and Steven Spielberg directed the iconic Indiana Jones films.
+ask: What are some other popular movies created by them?
+George Lucas is best known for creating the Star Wars franchise, which includes the original trilogy (A New Hope, The Empire Strikes Back, and Return of the Jedi) as well as the prequel trilogy (The Phantom Menace, Attack of the Clones, and Revenge of the Sith). He also wrote and directed the film THX 1138.
+
+Steven Spielberg, aside from Indiana Jones, is known for directing popular films such as Jaws, E.T. the Extra-Terrestrial, Jurassic Park, Schindler's List, Saving Private Ryan, and many more. He has an extensive filmography spanning multiple genres and has contributed significantly to the world of cinema.
