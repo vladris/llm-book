@@ -48,6 +48,12 @@
   * [Complex steps](./planning.html#complex-steps)
   * [Adjusting plans](./planning.html#adjusting-plans)
   * [Summary](./planning.html#summary)
+* [Chapter 8: Safety and Security](./safety-and-security.html)
+  * [Hallucinations](./safety-and-security.html#hallucinations)
+  * [Explainability](./safety-and-security.html#explainability)
+  * [Adversarial attacks](./safety-and-security.html#adversarial-attacks)
+  * [Responsible AI](./safety-and-security.html#responsible-ai)
+  * [Summary](./safety-and-security.html#summary)
 * Chapter 8: Safety and Security
 * Chapter 9: Frameworks
 * Chapter 10: Final Thoughts

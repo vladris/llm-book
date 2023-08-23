@@ -25,6 +25,7 @@ chapter_titles = {
     '05': 'Memory and Embeddings',
     '06': 'Interacting With External Systems',
     '07': 'Planning',
+    '08': 'Safety and Security',
 }
 
 # Chapter heading mappings
@@ -39,10 +40,11 @@ chapter_headings = {
     '05': 'Chapter 5: %s',
     '06': 'Chapter 6: %s',
     '07': 'Chapter 7: %s',
+    '08': 'Chapter 8: %s',
 }
 
 # Chapter order
-chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07']
+chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08']
 
 # Get chapter outpath
 
