@@ -54,7 +54,6 @@
   * [Adversarial attacks](./safety-and-security.html#adversarial-attacks)
   * [Responsible AI](./safety-and-security.html#responsible-ai)
   * [Summary](./safety-and-security.html#summary)
-* Chapter 8: Safety and Security
 * Chapter 9: Frameworks
 * Chapter 10: Final Thoughts
 * Appendix A: LLM Utilities
