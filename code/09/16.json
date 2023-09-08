@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "description": "English to French translation",
+  "type": "completion",
+  "completion": {
+    "max_tokens": 100,
+    "temperature": 1,
+    "top_p": 1,
+    "presence_penalty": 0,
+    "frequency_penalty": 0,
+    "chat_system_prompt": "You are an English to French translator."
+  }
+}
