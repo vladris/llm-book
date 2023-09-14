@@ -1,0 +1,9 @@
+Function: calendar.get_email
+Input vars: {'input': '', 'name': 'Jane Doe'}
+Output vars: ['JANE_EMAIL']
+Function: calendar.schedule_meeting
+Input vars: {'input': '$JANE_EMAIL', 'time': 'Monday at noon', 'location': 'Tipsy Cow', 'subject': 'Lunch'}
+Output vars: []
+* Getting email for Jane Doe
+* Meeting 'Lunch' at 'Tipsy Cow' scheduled for Monday at noon with jane.doe@example.com
+Success

@@ -1,0 +1,3 @@
+Here are some facts that can help you answer the following question: {{$data}}.
+
+{{$prompt}}

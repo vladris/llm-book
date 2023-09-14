@@ -1,0 +1,13 @@
+{
+    "schema": 1,
+    "description": "Q&A bot",
+    "type": "completion",
+    "completion": {
+      "max_tokens": 100,
+      "temperature": 1,
+      "top_p": 1,
+      "presence_penalty": 0,
+      "frequency_penalty": 0,
+      "chat_system_prompt": "You are a Q&A bot."
+    }
+  }
