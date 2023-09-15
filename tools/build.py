@@ -26,6 +26,7 @@ chapter_titles = {
     '06': 'Interacting With External Systems',
     '07': 'Planning',
     '08': 'Safety and Security',
+    'roadmap': 'Roadmap',
 }
 
 # Chapter heading mappings
@@ -41,14 +42,14 @@ chapter_headings = {
     '06': 'Chapter 6: %s',
     '07': 'Chapter 7: %s',
     '08': 'Chapter 8: %s',
+    'roadmap': '%s ~ LLMs at Work',
 }
 
 # Chapter order
-chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08']
+chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', 'roadmap']
+
 
 # Get chapter outpath
-
-
 def get_chapter_outpath(index):
     if index == 'index':
         return 'index.html'

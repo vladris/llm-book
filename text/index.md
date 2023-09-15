@@ -12,4 +12,5 @@ Haiku by `gpt-3.5-turbo`
 
 *This book is a work-in-progress. Not all chapters are available since not all
 of them have been written yet. [Subscribe](https://tinyletter.com/vladris/) to
-get notified when new chapters are published.*
+get notified when new chapters are published. Here is the
+[roadmap](./roadmap.html).*

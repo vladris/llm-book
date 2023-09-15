@@ -57,3 +57,12 @@
 * Chapter 9: Frameworks
 * Chapter 10: Final Thoughts
 * Appendix A: LLM Utilities
+
+---
+
+## Roadmap
+
+* [Roadmap](./roadmap.html)
+  * [First draft](./roadmap.html#first-draft)
+  * [Second pass](./roadmap.html#second-pass)
+  * [Production](./roadmap.html#production)
