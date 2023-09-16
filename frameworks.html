@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Frameworks ~ LLMs at Work</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-NhSC1YmyruXifcj/KFRWoC561YpHpc5Jtzgvbuzx5VozKpWvQ+4nXhPdFgmx8xqexRcpAglTj9sIBWINXa8x5w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="./static/style.css" type="text/css">
+<link rel="stylesheet" href="./static/pygments.css" type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
+</head>
+<body>
+<header>
+  <div class="title"><span>Chapter 9: Frameworks</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="./roadmap.html">🗺️ Roadmap</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
+  </ul>
+</header>
+<article>
+<h1>Chapter 9: Frameworks</h1>
+
+<p><img src="images/09/cover.png" alt="Frameworks"></p>
+
+<p>In this chapter:</p>
+
+<ul>
+<li>Reviewing common building blocks.</li>
+<li>Chaining components in LangChain.</li>
+<li>Using Semantic Kernel with connectors and plugins.</li>
+<li>Constraining output with various libraries.</li>
+</ul>
+
+<p>This chapter covers frameworks we can use to bootstrap our large language model
+development. We build a bunch of utilities and systems from scratch throughout
+the book to get a better understanding of the underlying concepts. That said, we
+don’t have to start from zero when we’re ready to build a large language
+model-backed system.</p>
+
+<p>We’ll start with a review of common building blocks. This is a recap of the
+various ideas we covered throughout the book – prompt templates, prompt
+selection and chaining, memory, vector databases, interacting with external
+systems, planning. These are all components built over the raw model APIs.</p>
+
+<p>Next, we’ll look at some frameworks that provide some of these “out-of-the-box”.
+They might have different names or look slightly different, but the frameworks
+aim to abstract some of these blocks and provide a higher-level abstraction for
+working with large language models.</p>
+
+<p>We’ll start with <em>LangChain</em><sup id="fnref1"><a href="#fn1" rel="footnote">1</a></sup>, a popular framework for developing
+applications powered by large language model. We’ll learn about its modules:
+model I/O, retrieval, chains, memory, agents, and callbacks.</p>
+
+<p>We’ll then take a look at <em>Semantic Kernel</em><sup id="fnref2"><a href="#fn2" rel="footnote">2</a></sup>, an open-source framework
+developed by Microsoft for similar purposes. We’ll see templates, memory,
+plugins, planning and more.</p>
+
+<p>While each framework choses different names, we’ll see how their components map
+to the building blocks we learned about. Since the field of engineering systems
+that incorporate large language models is new, the vocabulary hasn’t settled
+yet.</p>
+
+<p>Finally, we’ll cover a few other interesting libraries you might use during
+development. These are less general-purpose, more focused on specific tasks. We
+won’t go over code samples here, rather give you some starting points for future
+exploration.</p>
+
+<p>Let’s start with the recap of common building blocks.</p>
+
+<h2 id="common-building-blocks">Common building blocks</h2>
+
+<p>So far, we’ve been learning with concrete code examples of toy applications.
+This helped us better understand the underlying concepts that make up a solution
+built around a large language model. Now we can take a step back and look at
+things a bit more abstractly.</p>
+
+<p>First, a large language model applications involves interacting with a
+generative pre-trained model (GPT) through prompts. Figure 9.1 shows a
+high-level.</p>
+
+<p><img src="images/09/fig1.png" alt="Figure 9.1"></p>
+
+<p><em>Figure 9.1: High-level large language model-based system.</em></p>
+
+<p>We relied on OpenAI models throughout this book, but all large language models
+have similar interaction models. There are a few things that are specific to
+OpenAI:</p>
+
+<ul>
+<li>The shape of the API (e.g., the JSON format expected by <code>gpt-3.5-turbo</code> in
+terms of conversation lines with different roles).</li>
+<li>Built-in facilities, like the function calling syntax we saw in chapter 6 or
+GPT-4 plugins (which we’ll touch on in the next chapter).</li>
+<li>Token implementation details: encoding, limits, pricing.</li>
+</ul>
+
+<p>Outside of these specifics though, all large language models, even ones provided
+by other vendors, share the same interaction model:</p>
+
+<ul>
+<li>We prompt the model and get back a response.</li>
+<li>Prompt templates help reuse common prompt parts, while allowing parameterized
+inputs.</li>
+<li>The model maintains no state between interactions, so if we need it to recall
+things, we must use some form of external memory.</li>
+<li>If we want to connect it with external systems, we need some form of
+function-calling mechanism and tell the model what functions it has available
+and how to invoke them.</li>
+<li>Complex tasks require some form of planning – divide and conquer,
+chain-of-thought reasoning etc.</li>
+</ul>
+
+<p>These aspects are covered by frameworks aimed at facilitating development using
+large language models.</p>
+
+<h2 id="langchain">LangChain</h2>
+
+<p>The best way to describe LangChain is by quoting the introduction from the Get
+started documentation page<sup id="fnref3"><a href="#fn3" rel="footnote">3</a></sup>:</p>
+
+<blockquote>
+<p>LangChain is a framework for developing applications powered by language
+models. It enables applications that are:</p>
+
+<ul>
+<li><strong>Data-aware</strong>: connect a language model to other sources of data.</li>
+<li><strong>Agentic</strong>: allow a language model to interact with its environment.</li>
+</ul>
+
+<p>The main value props of LangChain are:</p>
+
+<ol>
+<li><strong>Components</strong>: abstractions for working with language models, along with a
+collection of implementations for each abstraction. Components are modular and
+easy-to-use, whether you are using the rest of the LangChain framework or not.</li>
+<li><strong>Off-the-shelf chains</strong>: a structured assembly of components for
+accomplishing specific higher-level tasks.</li>
+</ol>
+
+<p>Off-the-shelf chains make it easy to get started. For more complex
+applications and nuanced use-cases, components make it easy to customize
+existing chains or build new ones.</p>
+</blockquote>
+
+<p><em>Components</em>? <em>Chains</em>? As mentioned earlier, the vocabulary hasn’t settled yet
+*for this new field. We’ll look at these main value props of LangChain and see
+*how they connect with the concepts we discussed so far.</p>
+
+<p>Let’s start by installing LangChain. Listing 9.1 does that.</p>
+<div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>langchain
+</pre></div>
+
+<p><em>Listing 9.1: Installing LangChain.</em></p>
+
+<p>Time to dive in.</p>
+
+<h3>Models</h3>
+
+<p>Let’s implement the customary “hello world” using LangChain. Listing 9.2 shows
+how this will look like.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.llms</span> <span class="kn">import</span> <span class="n">OpenAI</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="s1">&#39;Say &quot;Hello world&quot; in Python.&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.2: “Hello world” using LangChain.</em></p>
+
+<p>Running this code should output <code>print(&quot;Hello world&quot;)</code>, much like the first
+examples we saw in chapter 2, when we were getting familiar with the OpenAI API.</p>
+
+<p>A few things to note: LangChain supports multiple models offered by various
+vendors – OpenAI, Azure OpenAI, Hugging Face, Cohere, LLAMA etc. The framework
+provides an abstraction where developers can use the same API and be able swap
+the underlying models. This is provided by a <code>BaseLLM</code> class. Vendor-specific
+APIs are available in the derived classes. In our example, we used the <code>OpenAI</code>
+class, which derives from <code>BaseLLM</code>.</p>
+
+<p>The common API uses the model object as a function that sends a prompt to a
+large language model and returns the response as a string.</p>
+
+<p>If we want a vendor-specific response we can use the <code>generate()</code> API instead.
+Remember, an OpenAI response is not just a string, rather it includes things
+like <code>finish_reason</code> and token usage. Listing 9.3 updates our example to use
+<code>generate()</code>.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.llms</span> <span class="kn">import</span> <span class="n">OpenAI</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">generate</span><span class="p">([</span><span class="s1">&#39;Say &quot;Hello world&quot; in Python.&#39;</span><span class="p">])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.3: “Hello world” with OpenAI-specific response.</em></p>
+
+<p>Running this code should output something like listing 9.4.</p>
+<div class="highlight"><pre><span></span>generations=[[Generation(text=&#39;\n\nprint(&quot;Hello world&quot;)&#39;,
+generation_info={&#39;finish_reason&#39;: &#39;stop&#39;, &#39;logprobs&#39;: None})]]
+llm_output={&#39;token_usage&#39;: {&#39;prompt_tokens&#39;: 8, &#39;completion_tokens&#39;: 7,
+&#39;total_tokens&#39;: 15}, &#39;model_name&#39;: &#39;text-davinci-003&#39;}
+run=[RunInfo(run_id=UUID(&#39;1a29aa8e-a4ab-4762-907a-ac28ae8748ad&#39;))]
+</pre></div>
+
+<p><em>Listing 9.4: Content of the response object.</em></p>
+
+<p>Note this includes all the information the OpenAI API returns. We haven’t
+specified a model when we created the LangChain OpenAI object, the default is
+<code>text-davinci-003</code>.</p>
+
+<p>Figure 9.2 shows the hierarchy of models.</p>
+
+<p><img src="images/09/fig2.png" alt="Figure 9.2"></p>
+
+<p><em>Figure 9.2: LangChain hierarchy of models.</em></p>
+
+<p>Note this is an abbreviation of the actual LangChain hierarchy for illustrative
+purposes.</p>
+
+<p>If we use <code>BaseLLM</code>, we work with an API that can handle any model supported by
+the framework, so we can easily swap the underlying model. If we want more
+specific functionality, we go down the hierarchy: <code>BaseOpenAI</code> offers a common
+API over OpenAI models. Further down the hierarchy, we can use <code>AzureOpenAI</code>,
+which is specific for OpenAI models hosted on Azure or <code>OpenAIChat</code> for OpenAI
+chat completion models and so on.</p>
+
+<p>The key takeaway is that we can use the common base API when we code our
+solution using LangChain and be able to easily swap the underlying models used
+if we want to try another vendor. The tradeoff is that we don’t get to leverage
+the vendor-specific capabilities.</p>
+
+<p>If we do want access to vendor-specific information, that is still available to
+us. Though if we take a dependency on it, we won’t be able to swap out the
+vendor as easily.</p>
+
+<p>LangChain also provides an abstraction over chat models, complete with a schema
+for representing human messages, AI responses and so on. Let’s update our “hello
+world” example again, this time to use <code>gpt-3.5-turbo</code>, as in listing 9.5.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.schema</span> <span class="kn">import</span> <span class="n">HumanMessage</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">llm</span><span class="p">([</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s1">&#39;Say &quot;Hello world&quot; in Python.&#39;</span><span class="p">)])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.5: “Hello world” using a chat model.</em></p>
+
+<p>The LangChain schema module provides classes for <code>HumanMessage</code>, <code>AIMessage</code>,
+<code>SystemMessage</code>, <code>FunctionMessage</code> – all the usual suspects we’ve been dealing
+with, but now implemented as Python abstractions with multi-model support.</p>
+
+<p>We won’t cover the full model capabilities provided by LangChain. In general,
+our aim is to overview the concepts. You can always refer to the framework’s
+documentation for all the nitty-gritty details. We should call out thought that
+LangChain provides many other facilities like keep track of token usage,
+streaming responses, and even a fake model we can use for testing to mock real
+model responses.</p>
+
+<h3>Prompts</h3>
+
+<p>Prompt templating is another common building block that the framework provides.
+Let’s see how we can implement our English-to-French translator in LangChain.
+Listing 9.6 shows the code.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;You are an English to French translator.&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;Translate this to French: </span><span class="si">{text}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">format_messages</span><span class="p">(</span>
+    <span class="n">text</span><span class="o">=</span><span class="s1">&#39;Aren</span><span class="se">\&#39;</span><span class="s1">t large language models amazing?&#39;</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.6: English to French translator using LangChain.</em></p>
+
+<p>LangChain provides both <code>PromptTemplate</code> and <code>ChatPromptTemplate</code> classes for
+the corresponding model types. While our simple <code>ChatTemplate</code> class we used
+throughout the book was a thin wrapper over the OpenAI-expected format,
+LangChain aims to support multiple vendors.</p>
+
+<p>Another difference is we’ve been using <code>{{ }}</code> to enclose parameters (this is
+called “handlebars syntax”, after the popular Handlebars JavaScript library<sup id="fnref4"><a href="#fn4" rel="footnote">4</a></sup>),
+while LangChain templates by default use single braces <code>{ }</code>. This is
+configurable though, LangChain supports multiple syntaxes for templates.</p>
+
+<p>LangChain prompt templates includes facilities for creating few-shot examples,
+partial templates (meaning we can fill in some of the parameters, then the rest
+later on), template composition, and more.</p>
+
+<p>The framework also offers some great output parsing capabilities.</p>
+
+<h3>Output parsing</h3>
+
+<p>As we saw throughout the book, in many cases we would like the large language
+model to output in some format like JSON, so we can then write code that
+interprets that response and loads it into an object.</p>
+
+<p>LangChain offers several output parser for some basic types, and a very rich
+JSON parser based on Pydantic<sup id="fnref5"><a href="#fn5" rel="footnote">5</a></sup>. Pydantic is a Python library for data
+validation – it allows developers to naturally define schemas (using Python
+classes and type annotations) and validates if data conforms to that schema.</p>
+
+<p>We’ll implement a simple example that uses the <code>PydanticOutputParser</code> to both
+describe to the large language model what shape we want the response in, and to
+parse the response into a Python object (listing 9.7). We ask the model for a
+fact on some subject and expect it to respond with both a <code>fact</code> and a
+<code>reference</code>.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain.output_parsers</span> <span class="kn">import</span> <span class="n">PydanticOutputParser</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Fact</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">fact</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A fact about a subject.&#39;</span><span class="p">)</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A reference for the fact.&#39;</span><span class="p">)</span>
+
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">Fact</span><span class="p">)</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;Your responses follow the format: </span><span class="si">{format}</span><span class="s1">&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;Tell me a fact about </span><span class="si">{subject}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">llm</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">format_messages</span><span class="p">(</span>
+    <span class="nb">format</span><span class="o">=</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>
+    <span class="n">subject</span><span class="o">=</span><span class="s1">&#39;data science&#39;</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">))</span>
+</pre></div>
+
+<p><em>Listing 9.7: Parsing output into a Python object using PydanticOutputParser.</em></p>
+
+<p>First, we define the shape of our <code>Fact</code>. We define this as having two fields,
+<code>fact</code> and <code>reference</code>, both strings. We also provide descriptions for the
+fields. Note we inherit from the <code>BaseModel</code> class – this is the Pydantic base
+class for defining schemas.</p>
+
+<p>Next, we create a <code>PydanticOutputParser</code> based on our Fact.</p>
+
+<p>We define a prompt template with parameterized <code>format</code> instructions (what shape
+of output we want from the model) and <code>subject</code>.</p>
+
+<p>Then comes the magic – instead of us painstakingly describing to the model how
+it should format the output, we simply call <code>parser.get_format_instructions()</code>.
+LangChain takes care of this part for us – we go from a Python class definition
+straight to business.</p>
+
+<p>Not only that, once we get a response from the model, we call <code>parser.parse()</code>
+on it and end up with an object of type <code>Fact</code>. This saves us a lot of work. In
+fact, LangChain also provides an <code>OutputFixingParser</code> which can send an invalid
+formatted output back to a large language model and ask for a fix.</p>
+
+<p>So far we’ve gone from simply calling the model, to defining a prompt template
+and using that with the model call, to adding an output parser and formatting
+instructions. We have more and more pieces to juggle. LangChain aims to makes
+this easy for developers. It’s time to talk about <em>components</em> and <em>chains</em>.</p>
+
+<h3>Chains</h3>
+
+<p>In LangChain parlance, we’ve been dealing with various components. In our
+examples so far, the model instance (for example, a <code>ChatOpenAI</code> object) and our
+prompt template (for example, a <code>ChatPromptTemplate</code> instance), are considered
+components. Chains help combine components.</p>
+
+<blockquote>
+<p><strong>Definition</strong>: a <em>chain</em> is a sequence of calls to components, which can
+include other chains. Chains allow us to combine multiple components together to
+create a single, coherent application.</p>
+</blockquote>
+
+<p>An example of a simple chain is taking user input, instantiating a template,
+making a large language model call, and getting a response.</p>
+
+<p>A more complex chain can combine multiple chains, or chains with other
+components, for arbitrarily large workflows.</p>
+
+<p>Let’s see how we can re-implement our fact prompting with output parsing using
+chains. Listing 9.8 shows the code.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chains</span> <span class="kn">import</span> <span class="n">LLMChain</span><span class="p">,</span> <span class="n">TransformChain</span><span class="p">,</span> <span class="n">SequentialChain</span>
+<span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain.output_parsers</span> <span class="kn">import</span> <span class="n">PydanticOutputParser</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Fact</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">fact</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A fact about a subject.&#39;</span><span class="p">)</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A reference for the fact.&#39;</span><span class="p">)</span>
+
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">Fact</span><span class="p">)</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;Your responses follow the format: </span><span class="si">{format}</span><span class="s1">&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;Tell me a fact about </span><span class="si">{subject}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">())</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">llm_chain</span> <span class="o">=</span> <span class="n">LLMChain</span><span class="p">(</span>
+    <span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+    <span class="n">output_key</span><span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="p">)</span>
+
+<span class="n">transform_chain</span> <span class="o">=</span> <span class="n">TransformChain</span><span class="p">(</span>
+    <span class="n">input_variables</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;json&#39;</span><span class="p">],</span>
+    <span class="n">output_variables</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;fact&#39;</span><span class="p">],</span>
+    <span class="n">transform</span><span class="o">=</span><span class="k">lambda</span> <span class="n">inp</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;fact&#39;</span><span class="p">:</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">inp</span><span class="p">[</span><span class="s1">&#39;json&#39;</span><span class="p">])})</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">SequentialChain</span><span class="p">(</span>
+    <span class="n">input_variables</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;subject&#39;</span><span class="p">],</span>
+    <span class="n">chains</span><span class="o">=</span><span class="p">[</span><span class="n">llm_chain</span><span class="p">,</span> <span class="n">transform_chain</span><span class="p">])</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">subject</span><span class="o">=</span><span class="s1">&#39;data scientists&#39;</span><span class="p">))</span>
+</pre></div>
+
+<p><em>Listing 9.8: Combining chains.</em></p>
+
+<p>Of course, since we’re dealing with toy examples, this sample might seem more
+convoluted than what we did in listing 9.7. That said, using chains scales much
+better as the size of our code and number of components increases.</p>
+
+<p>Let’s go over the code:</p>
+
+<ul>
+<li>We start by defining the same <code>Fact</code> class, <code>PydanticOutputParser</code>, and chat
+template.</li>
+<li>We then do a partial template instantiation by calling <code>template.partial()</code>.
+This is partial because we set the format instructions but leave <code>subject</code> for
+later. We store this partial instantiation as prompt.</li>
+<li>We create our first chain: an <code>LLMChain</code>. An <code>LLMChain</code> requires a prompt and
+a model. When invoking this chain, the prompt is fully instantiated based on
+input, and a request is sent to the model. Optionally we can ask for a
+specific output key. We use this to connect with other chains, so in our case
+we want the output to show up under the key <code>&#39;json&#39;</code>.</li>
+<li>Next, we create a <code>TransformerChain</code>. This is a different type of chain – it
+takes some input, applies a transformation (a function) to it, and returns
+some output. We set this up to call <code>parser.parse()</code> and return a dictionary
+with a single key, <code>&#39;fact&#39;</code>, containing our <code>Fact</code> object. The transformation
+function must take as input a dictionary and return a dictionary.</li>
+<li>We then connect our two chains using a <code>SequentialChain</code>. This will ensure
+<code>llm_chain</code> runs first, then the result is handed off to <code>transform_chain</code> to
+produce the final output.</li>
+<li>Finally, we run the chain by invoking it and providing the <code>subject</code>
+parameter.</li>
+</ul>
+
+<p>Figure 9.3 illustrates how the chains connect.</p>
+
+<p><img src="images/09/fig3.png" alt="Figure 9.3"></p>
+
+<p><em>Figure 9.3: Chain sequence.</em></p>
+
+<p>We have 3 chains:</p>
+
+<ol>
+<li>We start with our <code>SequentialChain</code>, which takes the user input (the subject
+for which we want a fact, and sequences execution of the other two chains).</li>
+<li>The <code>LLMChain</code> takes the input, makes the large language model call, and
+returns JSON output.</li>
+<li>The <code>TransformChain</code> takes the JSON output and uses the parser to deserialize
+this into a <code>Fact</code> object.</li>
+</ol>
+
+<p>Again, this might seem like overkill for our simple case, but it becomes much
+more useful in larger solutions, consisting of longer sequences.</p>
+
+<p>In fact, LangChain also provides a pipe syntax (using the <code>|</code> operator) to
+string things together. This handles a lot of the stuff under the hood and makes
+chain creation very concise. Listing 9.9 shows the more concise implementation.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain.output_parsers</span> <span class="kn">import</span> <span class="n">PydanticOutputParser</span>
+<span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Fact</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="n">fact</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A fact about a subject.&#39;</span><span class="p">)</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s1">&#39;A reference for the fact.&#39;</span><span class="p">)</span>
+
+
+<span class="n">parser</span> <span class="o">=</span> <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">Fact</span><span class="p">)</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;Your responses follow the format: </span><span class="si">{format}</span><span class="s1">&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;Tell me a fact about </span><span class="si">{subject}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">())</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">prompt</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">parser</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s1">&#39;subject&#39;</span><span class="p">:</span> <span class="s1">&#39;data scientists&#39;</span><span class="p">}))</span>
+</pre></div>
+
+<p><em>Listing 9.8: Using pipe syntax to create chains.</em></p>
+
+<p>This should look a lot better: we don’t explicitly mention any chain class
+anymore – in fact, we removed the imports from <code>langchain.chains</code>. We replaced
+all that with <code>prompt | llm | parser</code>. This reads as <em>“send <code>prompt</code> to the
+<code>llm</code>, then send the response to <code>parser</code>”</em>.</p>
+
+<p>As before, we run the whole thing by calling <code>chain.invoke()</code> and supplying the
+<code>subject</code>. Going forward we’ll use this syntax.</p>
+
+<h3>Memory and retrieval</h3>
+
+<p>LangChain also makes working with memory easy. The frameworks splits this into
+two separate modules: <em>retrieval</em> and <em>memory</em>. Note in chapter 5, when we
+discussed memory, we didn’t make this distinction.</p>
+
+<p>The <em>retrieval</em> module focuses on connecting with external storage. External
+storage can be a file (multiple formats are supported, like CSV, JSON, Markdown
+etc.), a vector database, and even Google web search. Data can be retrieved from
+any of these storage mediums and injected into a prompt.</p>
+
+<p>The <em>memory</em> module focuses on maintaining memory across large language model
+interactions, for example chat memory. LangChain provides more advanced memories
+like <em>conversation summary</em> and <em>knowledge graph</em>. We won’t cover all of these
+in depth – for this, I refer you again to the LangChain documentation.</p>
+
+<p>We’ll look at implementing our Pod Racing Q&amp;A in LangChain. As a reminder, we
+have our Pod Racing league dataset under the <code>/code/racing</code> folder in the book’s
+GitHub repo. Let’s see how we can use a vector store with LangChain to answer
+questions. Listing 9.10 reimplements our Pod Racing Q&amp;A bot using LangChain.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.document_loaders</span> <span class="kn">import</span> <span class="n">TextLoader</span><span class="p">,</span> <span class="n">DirectoryLoader</span>
+<span class="kn">from</span> <span class="nn">langchain.embeddings.openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+<span class="kn">from</span> <span class="nn">langchain.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain.schema.runnable</span> <span class="kn">import</span> <span class="n">RunnablePassthrough</span>
+<span class="kn">from</span> <span class="nn">langchain.vectorstores</span> <span class="kn">import</span> <span class="n">Chroma</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DirectoryLoader</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">,</span> <span class="n">loader_cls</span><span class="o">=</span><span class="n">TextLoader</span><span class="p">)</span>
+<span class="n">docs</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+<span class="n">db</span> <span class="o">=</span> <span class="n">Chroma</span><span class="o">.</span><span class="n">from_documents</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="n">OpenAIEmbeddings</span><span class="p">())</span>
+
+<span class="n">retriever</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">as_retriever</span><span class="p">(</span><span class="n">search_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;k&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">([</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span> <span class="s1">&#39;Your are a Q&amp;A AI.&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;system&#39;</span><span class="p">,</span>
+     <span class="s1">&#39;Here are some facts that can help you answer the following question: </span><span class="si">{data}</span><span class="s1">&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s1">&#39;user&#39;</span><span class="p">,</span> <span class="s1">&#39;</span><span class="si">{prompt}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="p">])</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">retriever</span><span class="p">,</span> <span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">RunnablePassthrough</span><span class="p">()}</span> <span class="o">|</span> <span class="n">template</span> <span class="o">|</span> <span class="n">llm</span>
+
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.10: Pod Racing Q&amp;A with LangChain.</em></p>
+
+<p>Let’s go over the steps:</p>
+
+<ul>
+<li>First, we store our dataset in Chroma. LangChain provides a lot of facilities
+for this, so we can do this in 3 lines of code: We start by loading all the
+files in the <code>../racing</code> directory using <code>DirectoryLoader</code> and supplying a
+<code>TextLoader</code> for loading each file (since our data set consists of text
+files). <code>load()</code> performs the load, we end up with a bunch of documents
+(<code>docs</code>). We call <code>Chroma.from_documents()</code> using the OpenAI model for
+embedding and that’s it – our in-memory vector store is now in <code>db</code>.</li>
+<li>Next, we create a <code>retriever</code> from the vector store. The <code>search_kwargs({&#39;k&#39;:
+1})</code> configures the retriever to get back the single, nearest (by cosine
+distance) document. We can use larger <code>k</code> values to retrieve multiple
+documents.</li>
+<li>The <code>template</code> is straight-forward, in fact, it’s the same as the one we used
+in listing 5.13, but now built with LangChain syntax.</li>
+<li>We instantiate a chat OpenAI model (<code>gpt-3.5-turbo</code>).</li>
+<li>The last part of the setup is creating the chain: For the <code>data</code> template
+parameter, we assign the retriever (under the hood, LangChain will ensure the
+vector store is queried at runtime based on the content of the rest of the
+prompt); For the <code>prompt</code> template parameter we use <code>RunnablePassthrough()</code> –
+that means we’ll get the actual value for this when we invoke the chain. We
+pipe this to the template, and the template to the model.</li>
+<li>In our interactive loop, the user asks a question (stored in <code>prompt</code>), we
+invoke the chain passing the question, and we print the content of the
+response.</li>
+</ul>
+
+<p>If we contrast this with the code in chapter 5, this version should look a lot
+more concise. This is expected – instead of us handcrafting each piece, we’re
+relying on a framework aimed at making this easier.</p>
+
+<p>We just saw how we can connect a vector store to a chain and help answer
+questions based on an external dataset. All in just a few lines of code.</p>
+
+<p>The other major piece we need to cover is interacting with external systems.
+We’ll see how we can do this with LangChain. For that, we need to look at
+<em>agents</em>.</p>
+
+<h3>Agents</h3>
+
+<p>LangChain documentation defines agents<sup id="fnref6"><a href="#fn6" rel="footnote">6</a></sup> as:</p>
+
+<blockquote>
+<p><strong>Definition</strong>: The core idea of <em>agents</em> is to use a large language model to
+choose a sequence of actions to take. In chains, a sequence of actions is
+hardcoded (in code). In agents, a language model is used as a reasoning engine
+to determine which actions to take and in which order.</p>
+</blockquote>
+
+<p>There are a few key components to this:</p>
+
+<ul>
+<li>An <strong>agent</strong> is responsible for which step to take next. An agent is powered
+by a large language model and a prompt.</li>
+<li><strong>Tools</strong> are functions that an agent can call.</li>
+<li><strong>Toolkits</strong> are collections of tools for the agent.</li>
+<li>An <strong>agent executor</strong> is the runtime for an agent, prompting the large
+language model and handling function calls.</li>
+</ul>
+
+<p>Contrasting this with what we learned so far, LangChain bundles the concepts of
+<em>functions</em> we saw in chapter 6, when we discussed interacting with external
+systems; and <em>planning</em>, which we saw in chapter 7.</p>
+
+<p>In the LangChain framework, an agent handles both the planning (what action to
+take next) and external system interaction (using tools).</p>
+
+<p>Agents can be used to build complex autonomous systems like Auto-GPT, which we
+mentioned in chapter 7. We won’t get that deep into it here – instead, let’s
+just see how we can use an agent and tools to reimplement our meeting scheduling
+solution from chapter 6. Listing 9.11 implements the same personal assistant as
+we saw in listing 6.8, using the external functions <code>get_emails()</code> and
+<code>schedule_meeting()</code>.</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.agents</span> <span class="kn">import</span> <span class="n">AgentExecutor</span><span class="p">,</span> <span class="n">OpenAIFunctionsAgent</span><span class="p">,</span> <span class="n">tool</span>
+<span class="kn">from</span> <span class="nn">langchain.chat_models</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain.schema</span> <span class="kn">import</span> <span class="n">SystemMessage</span>
+
+
+<span class="nd">@tool</span>
+<span class="k">def</span> <span class="nf">get_emails</span><span class="p">(</span><span class="n">names</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the email addresses of a set of users given their names&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;* Getting emails for </span><span class="si">{</span><span class="n">names</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+    <span class="n">address_book</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;John Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;john.doe@example.com&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;Jane Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;jane.doe@example.com&#39;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">emails</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+        <span class="n">emails</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">address_book</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">emails</span>
+
+
+<span class="nd">@tool</span>
+<span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sends a meeting invitation with the given subject to the given recipient emails at the given time&quot;&quot;&quot;</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;* Meeting &#39;</span><span class="si">{</span><span class="n">subject</span><span class="si">}</span><span class="s2">&#39; scheduled for </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">recipients</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;success&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+
+<span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">get_emails</span><span class="p">,</span> <span class="n">schedule_meeting</span><span class="p">]</span>
+
+<span class="n">system_message</span> <span class="o">=</span> <span class="n">SystemMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">&quot;You are an AI personal assistant.&quot;</span><span class="p">)</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="n">OpenAIFunctionsAgent</span><span class="o">.</span><span class="n">create_prompt</span><span class="p">(</span><span class="n">system_message</span><span class="o">=</span><span class="n">system_message</span><span class="p">)</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+
+<span class="n">agent</span> <span class="o">=</span> <span class="n">OpenAIFunctionsAgent</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">)</span>
+
+<span class="n">agent_executor</span> <span class="o">=</span> <span class="n">AgentExecutor</span><span class="p">(</span><span class="n">agent</span><span class="o">=</span><span class="n">agent</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">agent_executor</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+    <span class="s1">&#39;Schedule lunch with Jane Doe for Monday at noon at Tipsy Cow&#39;</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.11: Personal assistant with functions in LangChain.</em></p>
+
+<p>We start with our mock functions, but this time around, instead of providing a
+JSON description of the functions, we use the <code>@tool</code> decorator and provide
+descriptions as docstrings (see sidebar for Python decorators and docstrings).
+We collect the tools in the <code>tools</code> variable.</p>
+
+<blockquote>
+<p><strong>Sidebar: Python decorators and docstrings</strong></p>
+
+<p>Python decorators<sup id="fnref7"><a href="#fn7" rel="footnote">7</a></sup> are a language feature that allows you to modify the
+behavior of functions or class methods without changing their code. Decorators
+are functions themselves, taking another function as an argument, which they can
+wrap, extend, or otherwise alter the behavior of. Python offers syntactic sugar
+for this: a decorator function like <code>tool()</code> can be added on top of another
+function using <code>@</code> (<code>@tool</code>) and the function underneath gets passed as a
+parameter to the decorator. The decorator returns a function with matching
+signature of the decorated function but can run additional code.</p>
+
+<p>In our case, the <code>@tool</code> decorator registers the decorated function with
+LangChain as a function available to the large language model.</p>
+
+<p>Python docstrings<sup id="fnref8"><a href="#fn8" rel="footnote">8</a></sup> are strings which appear as the first thing in a module,
+class, or function. They are expressed using 3 quotes (<code>&quot;&quot;&quot;</code> or <code>&#39;&#39;&#39;</code>), and the
+Python compiler places them in the <code>__doc__</code> attribute of the module, class, or
+function. At runtime, code can look at this attribute and retrieve the docstring
+– LangChain leverages this and pulls the docstring from the decorated tools to
+describe the functions to the large language model.</p>
+</blockquote>
+
+<p>We then create a prompt. We do it a bit differently this time around – we start
+with a <code>SystemMessage</code>, then use the <code>OpenAIFunctionsAgent.create_prompt()</code>
+function to get our prompt.</p>
+
+<p>We use <code>ChatOpenAI()</code> as the model (again, <code>gpt-3.5-turbo</code>).</p>
+
+<p>We set up the agent: <code>OpenAIFunctionsAgent</code> is the LangChain agent that knows
+how to interpret OpenAI functions – it can translate our <code>tools</code> to the JSON
+description expected by the model and can interpret function call responses.</p>
+
+<p>Finally, we create the agent executor, providing the <code>agent</code> and the available
+<code>tools</code>. We set it to <code>verbose</code> mode, so we can take a look at what is going on
+during execution. We run this with the prompt “Schedule lunch with Jane Doe for
+Monday at noon at Tipsy Cow”.</p>
+
+<p>Listing 9.12 shows the verbose output.</p>
+<div class="highlight"><pre><span></span>&gt; Entering new AgentExecutor chain...
+
+Invoking: `get_emails` with `{&#39;names&#39;: [&#39;Jane Doe&#39;]}`
+
+* Getting emails for [&#39;Jane Doe&#39;]
+{&#39;Jane Doe&#39;: &#39;jane.doe@example.com&#39;}
+Invoking: `schedule_meeting` with `{&#39;subject&#39;: &#39;Lunch&#39;, &#39;recipients&#39;: [&#39;jane.doe@example.com&#39;], &#39;time&#39;: &#39;Monday at 12:00 PM&#39;}`
+
+* Meeting &#39;Lunch&#39; scheduled for Monday at 12:00 PM with [&#39;jane.doe@example.com&#39;]
+{&#39;success&#39;: True}I have scheduled a lunch meeting with Jane Doe for Monday at noon at Tipsy Cow.
+
+&gt; Finished chain.
+</pre></div>
+
+<p><em>Listing 9.12: Agent output.</em></p>
+
+<p>The lines prefixed with <code>*</code> come from our mock functions. The rest is the agent
+executor verbose output.</p>
+
+<p>As expected, based on the prompt, the first thing the agent does is call
+<code>get_emails()</code> to get Jane Doe’s email. Next, it calls <code>schedule_meeting()</code>.</p>
+
+<p>Note LangChain supplies the function calling mechanism under the hood.
+Translation from JSON response to function call is handled automatically.
+Similarly, the response is sent back to the model automatically. A lot of the
+glue we had to write in chapter 6 is now delegated to the framework.</p>
+
+<p>We’ll conclude our LangChain discussion here. There’s a lot more to cover, but
+this should be enough to pique your interest and get you started. We’ll move on
+to discuss another framework with similar goals: Semantic Kernel. But before we
+start that, let’s do a quick recap of this section.</p>
+
+<h3>LangChain recap</h3>
+
+<p>We covered the fundamentals of LangChain: components and chains.</p>
+
+<p>Components are modular pieces of functionality that handle some specific
+scenario like prompting, memory, or output parsing.</p>
+
+<p>Chains stich together calls to components, enabling us to create workflows.
+Chains can be nested, as we saw with the <code>SequentialChain</code> sequencing execution
+of an <code>LLMChain</code> and a <code>TransformChain</code>.</p>
+
+<p>We also saw how we can use LangChain to interface with memory, how to integrate
+with external code (tools), and how agents can automate execution of multiple
+steps. In our example, this was backed by the OpenAI function API.</p>
+
+<p>The pipe syntax makes it easy and intuitive to express complex chains.</p>
+
+<h2 id="semantic-kernel">Semantic Kernel</h2>
+
+<p>While LangChain relies on components and chaining components to build large
+language model-based solutions, Semantic Kernel takes a different approach<sup id="fnref9"><a href="#fn9" rel="footnote">9</a></sup>:</p>
+
+<blockquote>
+<p>Semantic Kernel has been engineered to allow developers to flexibly integrate
+AI services into their existing apps. To do so, Semantic Kernel provides a set
+of connectors that make it easy to add memories and models. In this way,
+Semantic Kernel is able to add a simulated <q>brain</q> to your app.</p>
+
+<p>Additionally, Semantic Kernel makes it easy to add skills to your applications
+with AI plugins that allow you to interact with the real world. These plugins
+are composed of prompts and native functions that can respond to triggers and
+perform actions. In this way, plugins are like the <q>body</q> of your AI app.</p>
+</blockquote>
+
+<p>With this framework, we have a <em>kernel</em> at the center, to which we connect
+plugins and memory, and rely on it for execution. Figure 9.4 illustrates this.</p>
+
+<p><img src="images/09/fig4.png" alt="Figure 9.4"></p>
+
+<p><em>Figure 9.4: Semantic Kernel with connectors and plugins.</em></p>
+
+<p>The kernel orchestrates execution. We use connectors to provide large language
+models (for prompt execution) and memory. We use plugins to connect
+functionality – these can be <em>semantic functions</em> (prompts) or <em>native
+functions</em> (code).</p>
+
+<p>Let’s look at some concrete examples, starting with “Hello world”. Listing 9.13
+installs Semantic Kernel.</p>
+<div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>semantic-kernel
+</pre></div>
+
+<p><em>Listing 9.13: Installing Semantic Kernel.</em></p>
+
+<p>Listing 9.14 is our “Hello world”.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">semantic_kernel</span> <span class="k">as</span> <span class="nn">sk</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.connectors.ai.open_ai</span> <span class="kn">import</span> <span class="n">OpenAIChatCompletion</span>
+
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">Kernel</span><span class="p">()</span>
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_chat_service</span><span class="p">(</span><span class="s1">&#39;chat_completion&#39;</span><span class="p">,</span> <span class="n">OpenAIChatCompletion</span><span class="p">(</span>
+    <span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="s1">&#39;Say &quot;Hello world&quot; in Python.&#39;</span>
+
+<span class="n">hello_world</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">create_semantic_function</span><span class="p">(</span><span class="n">prompt</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">hello_world</span><span class="p">())</span>
+</pre></div>
+
+<p><em>Listing 9.14: “Hello world” using Semantic Kernel.</em></p>
+
+<p>We first create our <code>kernel</code>. Then we add a chat service to it –
+<code>OpenAIChatCompletion</code> using <code>gpt-3.5-turbo</code>. Like LangChain, Semantic Kernel
+also supports multiple model vendors.</p>
+
+<p>Next comes the “Hello world” <code>prompt</code>. Then here is the framework-specific part:
+we use the prompt to create a <em>semantic function</em>. Semantic Kernel aims to
+provide a unified programming model across <em>native functions</em> – these are
+regular functions in our programming language – and <em>semantic functions</em>, which
+involve calling large language models. In this case, we create a semantic
+function based on our prompt, then we simply invoke it and print the result.</p>
+
+<p>Let’s see how prompt templating works in Semantic Kernel. Listing 9.15
+reimplements our English-to-French translator. The code is a bit more verbose
+than LangChain. One of the reason for that is that, unlike LangChain, which is a
+Python/JS framework, Semantic Kernel has Python, C#, and Java versions. Aiming
+to keep the API consistent across there languages, the Python version ends up
+being less concise.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">semantic_kernel</span> <span class="k">as</span> <span class="nn">sk</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.connectors.ai.open_ai</span> <span class="kn">import</span> <span class="n">OpenAIChatCompletion</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.semantic_functions.prompt_template_config</span> <span class="kn">import</span> <span class="n">PromptTemplateConfig</span>
+
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">Kernel</span><span class="p">()</span>
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_chat_service</span><span class="p">(</span><span class="s1">&#39;chat_completion&#39;</span><span class="p">,</span> <span class="n">OpenAIChatCompletion</span><span class="p">(</span>
+    <span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="n">prompt_config</span> <span class="o">=</span> <span class="n">PromptTemplateConfig</span><span class="p">(</span>
+    <span class="n">completion</span><span class="o">=</span><span class="n">PromptTemplateConfig</span><span class="o">.</span><span class="n">CompletionConfig</span><span class="p">(</span>
+        <span class="n">chat_system_prompt</span><span class="o">=</span><span class="s1">&#39;You are an English to French translator.&#39;</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">prompt_template</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">ChatPromptTemplate</span><span class="p">(</span>
+    <span class="s1">&#39;Translate this to French: {{$input}}&#39;</span><span class="p">,</span>
+    <span class="n">kernel</span><span class="o">.</span><span class="n">prompt_template_engine</span><span class="p">,</span>
+    <span class="n">prompt_config</span><span class="p">)</span>
+
+<span class="n">function_config</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">SemanticFunctionConfig</span><span class="p">(</span><span class="n">prompt_config</span><span class="p">,</span> <span class="n">prompt_template</span><span class="p">)</span>
+
+<span class="n">translate</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">register_semantic_function</span><span class="p">(</span>
+    <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;translate&#39;</span><span class="p">,</span> <span class="n">function_config</span><span class="p">)</span>
+
+<span class="n">text</span> <span class="o">=</span> <span class="s1">&#39;Aren</span><span class="se">\&#39;</span><span class="s1">t large language models amazing?&#39;</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="n">translate</span><span class="p">,</span> <span class="n">input_str</span><span class="o">=</span><span class="n">text</span><span class="p">)))</span>
+</pre></div>
+
+<p><em>Listing 9.15: English to French translator using Semantic Kernel.</em></p>
+
+<p>We start by creating the <code>kernel</code> and adding <code>OpenAIChatCompletion</code> like before.
+We then create our prompt template. The prompt configuration captures things
+like <code>temperature</code>, <code>max_tokens</code> etc. We use the defaults, so the only thing we
+configure in the <code>PromptTemplateConfig()</code> call is the <code>system</code> message.</p>
+
+<p>We then call <code>sk.ChatPromptTemplate()</code>. This function expects a template string,
+a template engine, and a prompt config. We use our translation prompt, note the
+syntax for template parameters: the parameter <code>input</code> is specified as
+<code>{{$input}}</code>. We use the kernel’s template engine and the config we just
+created.</p>
+
+<p>Next, we convert the template into a semantic function. In our “Hello world”
+example, we just passed in the prompt. This won’t work here – the simple
+<code>create_semantic_function()</code> function works with basic templates, but in our
+case we have a chat template with a system message, so we use a different API:
+we create a function configuration from the prompt config and template (stored
+as <code>function_config</code>), then we register this with the kernel by calling
+<code>kernel.register_semantic_function()</code>. The first argument is an optional skill
+name (we won’t use this here), the second argument is the name we want to
+register the function as (<code>translate</code>), the third argument is the function
+configuration.</p>
+
+<p>At this point, our kernel can translate from English to French.</p>
+
+<p>Finally, we call <code>kernel.run_async()</code>, passing it a function and an input
+string. Semantic Kernel runs things asynchronously, so we use the Python
+<code>asyncio</code> library to wait for the result of the call and print it to the
+console.</p>
+
+<p>While doing all this in code is verbose, Semantic Kernel provides a very neat
+way of doing this declaratively: we can create a <em>plugin</em>.</p>
+
+<h3>Plugins</h3>
+
+<p>Now we’re getting closer to one of the main advantages of Semantic Kernel: a declarative way of defining semantic functions and a mechanism to easily load them. The general structure of a plugin is:</p>
+<div class="highlight"><pre><span></span>&lt;Plugin folder&gt;
+|
+|--&lt;Function&gt;
+|  |
+|  |- config.json
+|  |- skprompt.txt
+|
+|--&lt;Function&gt;
+   |
+   |- config.json
+   |- skprompt.txt
+</pre></div>
+
+<p>A root plugin folder contains any number of functions. Each function is
+represented by a folder containing a prompt configuration (<code>config.json</code>) and a
+prompt template (<code>skprompt.txt</code>).</p>
+
+<p>Let’s make our previous example declarative. Listing 9.16 represents the prompt
+configuration as JSON. We’ll save this under <code>translate/to_french</code> as
+<code>config.json</code>.</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;English to French translation&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completion&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;completion&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;top_p&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;presence_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;frequency_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;chat_system_prompt&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are an English to French translator.&quot;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 9.16: English to French translation JSON prompt configuration.</em></p>
+
+<p>We’ll save the prompt template in listing 9.17 as
+<code>translate/to_french/skprompt.txt</code>.</p>
+<div class="highlight"><pre><span></span>Translate this to French: {{$input}}
+</pre></div>
+
+<p><em>Listing 9.17: English to French prompt template.</em></p>
+
+<p>Following the plugin storage format, our plugin is <code>translate</code>, our semantic
+function is <code>to_french</code>. We could potentially add other functions under this
+plugin.</p>
+
+<p>Now let’s see how we can load the plugin and translate (listing 9.18).</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">semantic_kernel</span> <span class="k">as</span> <span class="nn">sk</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.connectors.ai.open_ai</span> <span class="kn">import</span> <span class="n">OpenAIChatCompletion</span>
+
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">Kernel</span><span class="p">()</span>
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_chat_service</span><span class="p">(</span><span class="s1">&#39;chat_completion&#39;</span><span class="p">,</span> <span class="n">OpenAIChatCompletion</span><span class="p">(</span>
+    <span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="n">translate_plugin</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">import_semantic_skill_from_directory</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="s1">&#39;translate&#39;</span><span class="p">)</span>
+
+<span class="n">text</span> <span class="o">=</span> <span class="s1">&#39;Aren</span><span class="se">\&#39;</span><span class="s1">t large language models amazing?&#39;</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+    <span class="n">kernel</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="n">translate_plugin</span><span class="p">[</span><span class="s1">&#39;to_french&#39;</span><span class="p">],</span> <span class="n">input_str</span><span class="o">=</span><span class="n">text</span><span class="p">)))</span>
+</pre></div>
+
+<p><em>Listing 9.18: Importing a plugin from disk.</em></p>
+
+<p>We simply call <code>import_semantic_skill_from_directory()</code> and pass it the root
+plugin directory and the plugin we want loaded. In our case, <code>./translate</code>.</p>
+
+<p>We again call <code>run_async()</code>, this time referencing the function by its name in
+the plugin we loaded. As you can see, this code is significantly more concise.</p>
+
+<p>At the time of writing, Semantic Kernel doesn’t have a great way of specifying a
+chat template – the whole text document is interpreted as a user message, and
+the configuration JSON allows for a <code>chat_system_prompt</code> property, but no way to
+templatize a chat with multiple messages and roles. Also, unlike LangChain,
+Semantic Kernel doesn’t offer any built-in capabilities to deserialize model
+output into objects, so we’ll move on and look at how we can connect the kernel
+with an external memory.</p>
+
+<h3>Memory</h3>
+
+<p>Semantic Kernel offers connectors to multiple memory stores behind a unified
+interface, including a volatile in-memory store we can use for our examples.</p>
+
+<p>Let’s reimplement our Pod Racing Q&amp;A, this time with Semantic Kernel. We’ll
+start by specifying a <code>qa_plugin</code>. Listing 9.19 shows the configuration (it
+should go under <code>qa/qa/config.json</code>).</p>
+<div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Q&amp;A bot&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;completion&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;completion&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;top_p&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;presence_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;frequency_penalty&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;chat_system_prompt&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;You are a Q&amp;A bot.&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+<p><em>Listing 9.19: Q&amp;A JSON prompt configuration.</em></p>
+
+<p>Listing 9.20 shows the prompt template (it should go under
+<code>qa/qa/skprompt.txt</code>).</p>
+<div class="highlight"><pre><span></span>Here are some facts that can help you answer the following question: {{$data}}.
+
+{{$prompt}}
+</pre></div>
+
+<p><em>Listing 9.20: Q&amp;A prompt template.</em></p>
+
+<p>Now let’s look at the full Q&amp;A implementation, with embeddings (listing 9.21).</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">semantic_kernel</span> <span class="k">as</span> <span class="nn">sk</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.connectors.ai.open_ai</span> <span class="kn">import</span> <span class="n">OpenAIChatCompletion</span><span class="p">,</span> <span class="n">OpenAITextEmbedding</span>
+
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">Kernel</span><span class="p">()</span>
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_chat_service</span><span class="p">(</span><span class="s1">&#39;chat_completion&#39;</span><span class="p">,</span> <span class="n">OpenAIChatCompletion</span><span class="p">(</span>
+    <span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="n">qa_plugin</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">import_semantic_skill_from_directory</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span> <span class="s1">&#39;qa&#39;</span><span class="p">)</span>
+
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_text_embedding_generation_service</span><span class="p">(</span><span class="s1">&#39;ada&#39;</span><span class="p">,</span> <span class="n">OpenAITextEmbedding</span><span class="p">(</span>
+    <span class="s1">&#39;text-embedding-ada-002&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="n">kernel</span><span class="o">.</span><span class="n">register_memory_store</span><span class="p">(</span><span class="n">memory_store</span><span class="o">=</span><span class="n">sk</span><span class="o">.</span><span class="n">memory</span><span class="o">.</span><span class="n">VolatileMemoryStore</span><span class="p">())</span>
+
+<span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;../racing&#39;</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">memory</span><span class="o">.</span><span class="n">save_information_async</span><span class="p">(</span>
+            <span class="n">collection</span><span class="o">=</span><span class="s1">&#39;racing&#39;</span><span class="p">,</span>
+            <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+            <span class="nb">id</span><span class="o">=</span><span class="n">path</span><span class="p">))</span>
+
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="n">prompt</span> <span class="o">=</span> <span class="nb">input</span><span class="p">(</span><span class="s1">&#39;user: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">prompt</span> <span class="o">==</span> <span class="s1">&#39;exit&#39;</span><span class="p">:</span>
+        <span class="k">break</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">memory</span><span class="o">.</span><span class="n">search_async</span><span class="p">(</span><span class="s1">&#39;racing&#39;</span><span class="p">,</span> <span class="n">prompt</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="n">context</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">create_new_context</span><span class="p">()</span>
+    <span class="n">context</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+    <span class="n">context</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prompt</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">run_async</span><span class="p">(</span><span class="n">qa_plugin</span><span class="p">[</span><span class="s1">&#39;qa&#39;</span><span class="p">],</span> <span class="n">input_vars</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">variables</span><span class="p">)))</span>
+</pre></div>
+
+<p><em>Listing 9.21: Pod Racing Q&amp;A with Semantic Kernel.</em></p>
+
+<p>The first part we saw before: we create a <code>kernel</code>, add an
+<code>OpenAIChatCompletion</code> service, and load our <code>qa_plugin</code>. Then comes the memory
+part:</p>
+
+<ul>
+<li>First, we connect a text embedding service, in this case <code>OpenAITextEmbedding</code>
+via the <code>text-embedding-ada-002</code> model. Now the kernel knows how to embed
+data.</li>
+<li>We then register a memory store – since we’re using a toy example, we’ll
+create a <code>VolatileMemoryStore</code> which won’t be persisted to disk.</li>
+<li><p>Then for each file in our Pod Racing dataset, we save it to memory by calling
+<code>save_information_async()</code>.</p>
+
+<p>We’re again using <code>asyncio</code> here to make these asynchronous calls synchronous
+for our example, but for a real project we would be using <code>async</code>/<code>await</code> and
+write non-blocking code.</p></li>
+<li><p>In our interactive loop, we call <code>search_async()</code> to find the best match from
+our memory based on the user prompt.</p></li>
+</ul>
+
+<p>Since we now have to pass 2 parameters to the template, we no longer use the
+default <code>input_str</code>, rather we create a <code>context</code>, we set <code>data</code> and <code>prompt</code> in
+it, then pass it to the <code>qa_plugin</code> as <code>input_vars</code>. This is how Semantic Kernel
+passes multiple variables to a semantic function call.</p>
+
+<p>The result should behave just as all our other Pod Racing Q&amp;A samples. Notice
+again the difference between LangChain and Semantic Kernel in the way the code
+is structured – rather than using a memory/retriever component we add to a
+chain, here we connect everything to the kernel (including memory store,
+embedding function etc.) and let it handle connecting the individual pieces
+under the hood.</p>
+
+<p>Finally, let’s look at using Semantic Kernel to interact with external systems,
+and handle planning of how to complete a task.</p>
+
+<h3>Native functions and planning</h3>
+
+<p>So far, we looked at semantic functions – prompt templates we register with the
+kernel then we “invoke”, which means instantiating the template and interacting
+with the large language model. Semantic Kernel also supports native functions.
+We can register functions written in Python (or C# if we’re using the C# version
+of Semantic Kernel).</p>
+
+<p>For this, we’ll use the <code>@sk_function</code> decorator, and the <code>import_skill()</code>
+kernel function. We’ll also use the <code>SequentialPlanner</code> to let Semantic Kernel
+to come up with the list of steps we need to execute to achieve our goal.
+Listing 9.22 shows all of this.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">semantic_kernel</span> <span class="k">as</span> <span class="nn">sk</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.connectors.ai.open_ai</span> <span class="kn">import</span> <span class="n">OpenAIChatCompletion</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.orchestration.sk_context</span> <span class="kn">import</span> <span class="n">SKContext</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.planning.sequential_planner.sequential_planner</span> <span class="kn">import</span> <span class="n">SequentialPlanner</span>
+<span class="kn">from</span> <span class="nn">semantic_kernel.skill_definition</span> <span class="kn">import</span> <span class="n">sk_function</span><span class="p">,</span> <span class="n">sk_function_context_parameter</span>
+
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">sk</span><span class="o">.</span><span class="n">Kernel</span><span class="p">()</span>
+<span class="n">kernel</span><span class="o">.</span><span class="n">add_chat_service</span><span class="p">(</span><span class="s1">&#39;chat_completion&#39;</span><span class="p">,</span> <span class="n">OpenAIChatCompletion</span><span class="p">(</span>
+    <span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]))</span>
+
+<span class="k">class</span> <span class="nc">CalendarPlugin</span><span class="p">:</span>
+    <span class="nd">@sk_function</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Gets the email addresses of a user given their name&#39;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;get_email&#39;</span>
+    <span class="p">)</span>
+    <span class="nd">@sk_function_context_parameter</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;name&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;A name for which to return the email address&#39;</span>
+    <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">get_email</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SKContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;* Getting email for </span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+
+        <span class="n">address_book</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;John Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;john.doe@example.com&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;Jane Doe&#39;</span><span class="p">:</span> <span class="s1">&#39;jane.doe@example.com&#39;</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">address_book</span><span class="p">[</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]]</span>
+
+
+    <span class="nd">@sk_function</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Sends a meeting invitation with the given subject to the given recipient emails at the given time&#39;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;schedule_meeting&#39;</span>
+    <span class="p">)</span>
+    <span class="nd">@sk_function_context_parameter</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;input&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Recipient email for the meeting invitation&#39;</span>
+    <span class="p">)</span>
+    <span class="nd">@sk_function_context_parameter</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;subject&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Meeting subject&#39;</span>
+    <span class="p">)</span>
+    <span class="nd">@sk_function_context_parameter</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;time&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Meeting time&quot;</span>
+    <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">schedule_meeting</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SKContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;* Meeting &#39;</span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;subject&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39; scheduled for </span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> with </span><span class="si">{</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;input&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="s1">&#39;Success&#39;</span>
+
+
+<span class="n">calendar_plugin</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">import_skill</span><span class="p">(</span><span class="n">CalendarPlugin</span><span class="p">(),</span> <span class="s1">&#39;calendar&#39;</span><span class="p">)</span>
+
+<span class="n">ask</span> <span class="o">=</span> <span class="s1">&#39;Schedule lunch with Jane Doe for Monday at noon at Tipsy Cow&#39;</span>
+
+<span class="n">planner</span> <span class="o">=</span> <span class="n">SequentialPlanner</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+<span class="n">plan</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">planner</span><span class="o">.</span><span class="n">create_plan_async</span><span class="p">(</span><span class="n">goal</span><span class="o">=</span><span class="n">ask</span><span class="p">))</span>
+
+<span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">_steps</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Function: &quot;</span> <span class="o">+</span> <span class="n">step</span><span class="o">.</span><span class="n">skill_name</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">step</span><span class="o">.</span><span class="n">_function</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Input vars: &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">variables</span><span class="p">))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Output vars: &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">_outputs</span><span class="p">))</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">plan</span><span class="o">.</span><span class="n">invoke_async</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">)</span>
+</pre></div>
+
+<p><em>Listing 9.22: Personal assistant with functions in Semantic Kernel.</em></p>
+
+<p>At the time of writing, Semantic Kernel doesn’t natively support OpenAI
+functions. Unlike LangChain, where we can simply use the <code>OpenAIFunctionsAgent</code>,
+which leverages OpenAI function calling, in this case the planner will output a
+set of large language model-generated steps, then execute them in sequence on
+the client.</p>
+
+<p>To get this working, we need to lightly tweak our functions. Semantic Kernel is
+pickier with passing data between functions in a plan. We updated <code>get_emails()</code>
+to be <code>get_email()</code> and return a single email as a string. Both <code>get_email()</code>
+and <code>schedule_meeting()</code> take an <code>SKConext</code> as parameter, which will contain all
+the arguments for the function call. We also pass the return value of the first
+function to the second using the built-in <code>input</code> parameter.</p>
+
+<p>With that said, let’s go over the code:</p>
+
+<ul>
+<li>We define a native plugin, <code>CalendarPlugin</code>.</li>
+<li>This implements <code>get_email()</code> and <code>schedule_meeting()</code>. We decorate both
+functions with descriptions for the function and the parameters.</li>
+<li>We add this to the kernel using <code>import_skill()</code>.</li>
+<li>We instantiate a <code>SequentialPlanner</code> and create a plan, where the goal is the
+user ask.</li>
+<li>We print the steps of the plan.</li>
+<li>Finally, we execute the plan and print the result.</li>
+</ul>
+
+<p>The output of running this code is shown in listing 9.23.</p>
+<div class="highlight"><pre><span></span>Function: calendar.get_email
+Input vars: {&#39;input&#39;: &#39;&#39;, &#39;name&#39;: &#39;Jane Doe&#39;}
+Output vars: [&#39;JANE_EMAIL&#39;]
+Function: calendar.schedule_meeting
+Input vars: {&#39;input&#39;: &#39;$JANE_EMAIL&#39;, &#39;time&#39;: &#39;Monday at noon&#39;, &#39;location&#39;: &#39;Tipsy Cow&#39;, &#39;subject&#39;: &#39;Lunch&#39;}
+Output vars: []
+* Getting email for Jane Doe
+* Meeting &#39;Lunch&#39; at &#39;Tipsy Cow&#39; scheduled for Monday at noon with jane.doe@example.com
+Success
+</pre></div>
+
+<p><em>Listing 9.23: Plan execution output.</em></p>
+
+<p>Our debug output shows how the planner determined we should invoke the available
+functions, and with which arguments. Then we see our mock functions were indeed
+invoked with the expected parameters.</p>
+
+<p>Note this is less autonomous than an agent – rather than let the large language
+model reason at each step which function to call, we have an upfront plan we run
+through. Semantic Kernel also offers a <code>StepwisePlanner</code>, which acts more like
+an agent and, after executing each step, it reassesses the plan and corrects
+course as needed. We won’t cover it here but feel free to explore.</p>
+
+<p>A neat feature of Semantic Kernel, which we also won’t go into depth here, is
+that a plan can mix native and semantic functions – so part of the processing
+can be done by executing code, and part can be done by making large language
+model calls.</p>
+
+<p>Semantic Kernel is a bit more verbose than LangChain, and at the time of writing
+doesn’t support some of the newer OpenAI features, but it is a solid framework
+for building large language model-powered solutions, including support for all
+we care about: prompt templating, support for multiple models, memory, planning,
+and mixing native code with model calls.</p>
+
+<h3>Semantic Kernel recap</h3>
+
+<p>Semantic Kernel aims to provide a central orchestrator to which we add
+connectors and plugins.</p>
+
+<p>Connectors enable the kernel to interact with large language models and memory
+stores.</p>
+
+<p>Plugins add capabilities to the kernel. They can take the form of semantic
+functions – prompt templates; or native functions – code. The framework provides
+a common abstraction where we can mix and match native code and prompts to build
+our solution.</p>
+
+<p>Planners can handle complex tasks. We looked as an example of a
+<code>SequentialPlanner</code>, which takes a goal and generates a multi-step plan we can
+then execute. A <code>StepwisePlanner</code> can reevaluate the result of executing each
+step and course-correct if needed.</p>
+
+<h2 id="other-libraries">Other libraries</h2>
+
+<p>We’ll conclude this chapter with a quick overview of some other libraries. Note
+these are not full-fledged frameworks, rather libraries which aim to address one
+aspect of the ecosystem. LangChain and Semantic Kernel aim to be frameworks to
+underpin whole solutions. The libraries we’re covering in this section are more
+targeted – pull them in when you need some specific functionality.</p>
+
+<p>We won’t go over any code here – feel free to check out the libraries and see
+where they would be useful.</p>
+
+<h3>Guardrails</h3>
+
+<p>From the Guardrails<sup id="fnref10"><a href="#fn10" rel="footnote">10</a></sup> documentation:</p>
+
+<blockquote>
+<p>Guardrails is a Python package that lets a user add structure, type and
+quality guarantees to the outputs of large language models (LLMs). Guardrails:</p>
+
+<ul>
+<li>does pydantic-style validation of LLM outputs (including semantic validation
+such as checking for bias in generated text, checking for bugs in generated
+code, etc.)</li>
+<li>takes corrective actions (e.g. reasking LLM) when validation fails,</li>
+<li>enforces structure and type guarantees (e.g. JSON).</li>
+</ul>
+</blockquote>
+
+<p>Guardrails is a library targeted at ensuring model output conforms to a defined
+schema, aiming to address the pain point of consuming model-generated output by
+code.</p>
+
+<p>Guardrails uses the <code>rail</code> (Reliable AI markup Language) file format to specify
+output schema, validation, and what corrective actions to take if output doesn’t
+conform. An example of corrective action is re-prompting the model to address an
+issue.</p>
+
+<p>We saw Pydantic when we covered LangChain: the Python library that allows us to
+define a class like <code>Fact</code>, then have LangChain parse model output into an
+instance of the class. Guardrails take this one step further, with richer
+validation and corrective actions.</p>
+
+<h3>Guidance</h3>
+
+<p>From the Guidance<sup id="fnref11"><a href="#fn11" rel="footnote">11</a></sup> documentation:</p>
+
+<blockquote>
+<p>Guidance enables you to control modern language models more effectively and
+efficiently than traditional prompting or chaining. Guidance programs allow you
+to interleave generation, prompting, and logical control into a single
+continuous flow matching how the language model actually processes the text.
+Simple output structures like Chain of Thought and its many variants (e.g., ART,
+Auto-CoT, etc.) have been shown to improve performance.</p>
+</blockquote>
+
+<p>Guidance provides an extremely rich template language. We express what we want
+as a prompt, and under the hood, Guidance will ensure the model provides output
+that conforms to the exact schema we want.</p>
+
+<p>Unlike the simpler template languages we looked at so far, which mostly replace
+template parameters with actual values, in Guidance we can also specify
+parameters we expect the model to fill in, and define additional constraints
+like token counts, regular expressions to match and so on.</p>
+
+<p>In the same template, we can mix our prompt input and output guidance for the
+model, enabling a very powerful way to create prompts.</p>
+
+<h3>TypeChat</h3>
+
+<p>From the TypeChat<sup id="fnref12"><a href="#fn12" rel="footnote">12</a></sup> documentation:</p>
+
+<blockquote>
+<p>TypeChat replaces <em>prompt engineering</em> with <em>schema engineering</em>.</p>
+
+<p>[...]</p>
+
+<p>After defining your types, TypeChat takes care of the rest by:</p>
+
+<ol>
+<li>Constructing a prompt to the LLM using types.</li>
+<li>Validating the LLM response conforms to the schema. If the validation
+fails, repair the non-conforming output through further language model
+interaction.</li>
+<li>Summarizing succinctly (without use of a LLM) the instance and confirm that
+it aligns with user intent.</li>
+</ol>
+</blockquote>
+
+<p>Instead of us having to describe in words what we expect from a large language
+model, with TypeChat we can declare the schema of the expected response. The
+library translates this into a prompt. It also type-checks the model response,
+and if the response contains schema errors, it automatically re-prompts the
+model by passing it the error message.</p>
+
+<p>TypeChat is a TypeScript library. The core idea comes from the fact that we
+usually ask models to output JSON when we want to connect them with other
+systems, and TypeScript is the best solution to express and validate JSON
+schemas.</p>
+
+<p>Ideally, we don’t need to tune and find just the right prompt that gives us the
+response we expect, rather we just declare the types we want and let TypeChat
+take care of the rest.</p>
+
+<p>The frameworks and libraries we covered in this chapter all aim to make
+integration of large language models in software solutions easier, either by
+providing a “batteries included” solution with everything you would need, or
+addressing a specific problem like ensuring model output can be readily consumed
+by code. In the next chapter, I’ll share some of my thoughts on where I see the
+field evolving.</p>
+
+<h2 id="summary">Summary</h2>
+
+<ul>
+<li>Regardless of which large language model we use, a software solution that
+integrates a model has a common set of building blocks.</li>
+<li>Prompt templating, external memory, giving the model the ability to interact
+with external systems, and planning are all examples of common building
+blocks.</li>
+<li>Basing a solution on a framework frees us from having to implement everything
+from scratch.</li>
+<li>The LangChain framework relies on components (each addressing one specific
+aspect) and chains (connecting components).</li>
+<li>The Semantic Kernel framework uses a central kernel to orchestrate execution,
+to which we add connections (to models and memory) and plugins (native or
+semantic functions).</li>
+<li>Other libraries like Guardrails, Guidance, and TypeChat address more targeted
+aspects of development with large language models.</li>
+<li>These libraries also provide an opinionated way on how to build large language
+model-backed solutions.</li>
+</ul>
+
+<div class="footnotes">
+<hr>
+<ol>
+
+<li id="fn1">
+<p><a href="https://www.langchain.com/">https://www.langchain.com/</a>&nbsp;<a href="#fnref1" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn2">
+<p><a href="https://learn.microsoft.com/en-us/semantic-kernel/overview/">https://learn.microsoft.com/en-us/semantic-kernel/overview/</a>&nbsp;<a href="#fnref2" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn3">
+<p><a href="https://python.langchain.com/docs/get_started/introduction">https://python.langchain.com/docs/get_started/introduction</a>&nbsp;<a href="#fnref3" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn4">
+<p><a href="https://handlebarsjs.com/">https://handlebarsjs.com/</a>&nbsp;<a href="#fnref4" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn5">
+<p><a href="https://docs.pydantic.dev/latest/">https://docs.pydantic.dev/latest/</a>&nbsp;<a href="#fnref5" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn6">
+<p><a href="https://python.langchain.com/docs/modules/agents/">https://python.langchain.com/docs/modules/agents/</a>&nbsp;<a href="#fnref6" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn7">
+<p><a href="https://docs.python.org/3/glossary.html#term-decorator">https://docs.python.org/3/glossary.html#term-decorator</a>&nbsp;<a href="#fnref7" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn8">
+<p><a href="https://docs.python.org/3/glossary.html#term-docstring">https://docs.python.org/3/glossary.html#term-docstring</a>&nbsp;<a href="#fnref8" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn9">
+<p><a href="https://learn.microsoft.com/en-us/semantic-kernel/overview/">https://learn.microsoft.com/en-us/semantic-kernel/overview/</a>&nbsp;<a href="#fnref9" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn10">
+<p><a href="https://github.com/ShreyaR/guardrails">https://github.com/ShreyaR/guardrails</a>&nbsp;<a href="#fnref10" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn11">
+<p><a href="https://github.com/guidance-ai/guidance">https://github.com/guidance-ai/guidance</a>&nbsp;<a href="#fnref11" rev="footnote">&#8617;</a></p>
+</li>
+
+<li id="fn12">
+<p><a href="https://github.com/microsoft/TypeChat">https://github.com/microsoft/TypeChat</a>&nbsp;<a href="#fnref12" rev="footnote">&#8617;</a></p>
+</li>
+
+</ol>
+</div>
+
+</article>
+<nav>
+<p>
+
+<span>Previous: <a href="safety-and-security.html">Safety and Security</a>. 
+
+
+<span>Next: <a href="roadmap.html">Roadmap</a>.
+
+</p>
+</nav>
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
+</body>
+</html>
