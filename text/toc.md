@@ -54,8 +54,13 @@
   * [Adversarial attacks](./safety-and-security.html#adversarial-attacks)
   * [Responsible AI](./safety-and-security.html#responsible-ai)
   * [Summary](./safety-and-security.html#summary)
-* Chapter 9: Frameworks
-* Chapter 10: Final Thoughts
+* [Chapter 9: Frameworks](./frameworks.html)
+  * [Common building blocks](./frameworks.html#common-building-blocks)
+  * [LangChain](./frameworks.html#langchain)
+  * [Semantic Kernel](./frameworks.html#semantic-kernel)
+  * [Other libraries](./frameworks.html#other-libraries)
+  * [Summary](./frameworks.html#summary)
+* Chapter 10: Future Thoughts
 * Appendix A: LLM Utilities
 
 ---
