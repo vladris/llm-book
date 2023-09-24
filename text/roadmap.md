@@ -12,7 +12,7 @@ This is the first draft of the full manuscript.
 - ✅ Chapter 3: Prompt Engineering
 - ✅ Chapter 4: Learning and Tuning
 - ✅ Chapter 5: Memory and Embeddings
-- ✅ Chapter 6: Interacting With External Systems
+- ✅ Chapter 6: Interacting with External Systems
 - ✅ Chapter 7: Planning
 - ✅ Chapter 8: Safety and Security
 - ✅️ Chapter 9: Frameworks
