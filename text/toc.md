@@ -60,7 +60,7 @@
   * [Semantic Kernel](./frameworks.html#semantic-kernel)
   * [Other libraries](./frameworks.html#other-libraries)
   * [Summary](./frameworks.html#summary)
-* Chapter 10: Future Thoughts
+* Chapter 10: Closing Thoughts
 * Appendix A: LLM Utilities
 
 ---

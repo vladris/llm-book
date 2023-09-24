@@ -16,7 +16,7 @@ This is the first draft of the full manuscript.
 - ✅ Chapter 7: Planning
 - ✅ Chapter 8: Safety and Security
 - ✅️ Chapter 9: Frameworks
-- ◻️ Chapter 10: Future Thoughts
+- ◻️ Chapter 10: Closing Thoughts
 - ◻️ Appendix
 
 ## Second pass
