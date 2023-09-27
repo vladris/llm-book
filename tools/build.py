@@ -23,10 +23,11 @@ chapter_titles = {
     '03': 'Prompt Engineering',
     '04': 'Learning and Tuning',
     '05': 'Memory and Embeddings',
-    '06': 'Interacting With External Systems',
+    '06': 'Interacting with External Systems',
     '07': 'Planning',
     '08': 'Safety and Security',
     '09': 'Frameworks',
+    '10': 'Closing Thoughts',
     'roadmap': 'Roadmap',
 }
 
@@ -44,11 +45,12 @@ chapter_headings = {
     '07': 'Chapter 7: %s',
     '08': 'Chapter 8: %s',
     '09': 'Chapter 9: %s',
+    '10': 'Chapter 10: %s',
     'roadmap': '%s ~ LLMs at Work',
 }
 
 # Chapter order
-chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', '09', 'roadmap']
+chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', 'roadmap']
 
 
 # Get chapter outpath
