@@ -25,8 +25,8 @@ This is the first draft of the full manuscript.
 This covers known updates, the list might grow as I get feedback.
 
 - ◻️ Update Chapter 1 (more accurate once first draft is ready)
-- ◻️ Update Chapter 4 (fine-tuning)
-- ◻️ Update all examples to use `gpt-3.5-instruct` instead of `text-davinci-003`
+- ✅️ Update Chapter 4 (fine-tuning)
+- ◻️ Update all examples to use `gpt-3.5-turbo-instruct` instead of `text-davinci-003`
 - ◻️ Address additional feedback
 
 ## Production
