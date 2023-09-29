@@ -30,5 +30,5 @@ class Template:
         instance['prompt'] = format(instance['prompt'], **parameters)
 
         return openai.Completion.create(
-            model='text-davinci-003',
+            model='gpt-3.5-turbo-instruct',
             **instance)

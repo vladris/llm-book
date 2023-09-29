@@ -7,13 +7,13 @@
       "text": "\n\nprint(\"Hello world\")"
     }
   ],
-  "created": 1682285944,
-  "id": "cmpl-78biCYERRqP7jSHMBy8nXoMVshOAr",
-  "model": "text-davinci-003",
+  "created": 1696028086,
+  "id": "cmpl-84GfewCM1npGywwNEDFMlMd5SzfFL",
+  "model": "gpt-3.5-turbo-instruct",
   "object": "text_completion",
   "usage": {
-    "completion_tokens": 7,
+    "completion_tokens": 6,
     "prompt_tokens": 7,
-    "total_tokens": 14
+    "total_tokens": 13
   }
 }

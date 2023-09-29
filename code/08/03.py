@@ -1,7 +1,11 @@
-from llm_utils import Template
+import openai
+import os
 
-chat = Template({
-    'max_tokens': 500,
-    'prompt': 'Tell me about the habitat and behavior of the flying razor fish.'})
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
-print(chat.completion({}).choices[0].text)
+response = openai.Completion.create(
+    model='text-davinci-003',
+    max_tokens=500,
+    prompt='Tell me about the habitat and behavior of the flying razor fish.')
+
+print(response.choices[0].text)

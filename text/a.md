@@ -46,7 +46,7 @@ class Template:
         instance['prompt'] = insert_params(instance['prompt'], **parameters)
 
         return openai.Completion.create(
-            model='text-davinci-003',
+            model='gpt-3.5-turbo-instruct',
             **instance)
 
 
@@ -107,7 +107,7 @@ exception. The provided utilities are:
 * The `Template` class, a completion template. This can be created from an
   object or loaded from a file conforming to the OpenAI API schema. The
   `completion()` function instantiates the template with actual parameters and
-  sends a request to `text-davinci-003`.
+  sends a request to `gpt-3.5-turbo-instruct`.
 * The `ChatTemplate` class is similar to `Template`, but represents a chat
   completion template and sends the request to `gpt-3.5-turbo`.
 * The `count_tokens()` function uses the `tiktoken` library and provides a token
