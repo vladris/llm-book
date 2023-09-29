@@ -119,19 +119,24 @@ another topic that I can assist you with, please feel free to ask.
 
 <p>Older models don’t do that well. Listing 8.3 shows the same prompt sent to
 <code>text-davinci-003</code>.</p>
-<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">Template</span>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
 
-<span class="n">chat</span> <span class="o">=</span> <span class="n">Template</span><span class="p">({</span>
-    <span class="s1">&#39;max_tokens&#39;</span><span class="p">:</span> <span class="mi">500</span><span class="p">,</span>
-    <span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="s1">&#39;Tell me about the habitat and behavior of the flying razor fish.&#39;</span><span class="p">})</span>
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="s1">&#39;Tell me about the habitat and behavior of the flying razor fish.&#39;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
 </pre></div>
 
 <p><em>Listing 8.3: Asking text-davinci-003 for a description of a made-up species.</em></p>
 
-<p>Unlike <code>gpt-3.5-tubro</code>, <code>text-davinci-003</code> has no problem hallucinating this
-inexistent species of fish (listing 8.4).</p>
+<p>We can’t use <code>llm_utils</code> here since our helpers use <code>gpt-3.5-turbo-instruct</code> for
+completion, not <code>text-davinci-003</code>. Unlike <code>gpt-3.5-tubro</code>, <code>text-davinci-003</code>
+has no problem hallucinating this inexistent species of fish (listing 8.4).</p>
 <div class="highlight"><pre><span></span>The flying razor fish (Hemipteronotus signatus) is a species of freshwater fish
 that is found in the rivers and tributaries in northern India. It is a
 surface-dwelling fish, typically found in stagnant or slow-moving bodies of
@@ -163,7 +168,10 @@ applications, but if our scenario is a factual Q&amp;A, this is undesirable. Not
 fool-proof, but one idea is to provide some guidance to the model via additional
 prompt context and tell it to not make things up. Listing 8.5 shows an updated
 prompt for <code>text-davinci-003</code>.</p>
-<div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">llm_utils</span> <span class="kn">import</span> <span class="n">Template</span>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
 
 <span class="n">guide</span> <span class="o">=</span> <span class="s1">&#39;&#39;&#39;</span>
 <span class="s1">You are a large language model trained on vast amounts of data.</span>
@@ -171,11 +179,12 @@ prompt for <code>text-davinci-003</code>.</p>
 <span class="s1">When you do not have enough information to provide an accurate answer, you will say so.</span>
 <span class="s1">&#39;&#39;&#39;</span>
 
-<span class="n">chat</span> <span class="o">=</span> <span class="n">Template</span><span class="p">({</span>
-    <span class="s1">&#39;max_tokens&#39;</span><span class="p">:</span> <span class="mi">500</span><span class="p">,</span>
-    <span class="s1">&#39;prompt&#39;</span><span class="p">:</span> <span class="n">guide</span> <span class="o">+</span> <span class="s1">&#39;Tell me about the habitat and behavior of the flying razor fish.&#39;</span><span class="p">})</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">prompt</span><span class="o">=</span><span class="n">guide</span> <span class="o">+</span> <span class="s1">&#39;Tell me about the habitat and behavior of the flying razor fish.&#39;</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">chat</span><span class="o">.</span><span class="n">completion</span><span class="p">({})</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
 </pre></div>
 
 <p><em>Listing 8.5: Additional guidance to the model to avoid hallucinations.</em></p>

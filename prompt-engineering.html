@@ -435,7 +435,7 @@ end up with a prompt we send to the large language model.</p>
         <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_params</span><span class="p">(</span><span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo-instruct&#39;</span><span class="p">,</span>
             <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
 </pre></div>
 
@@ -513,10 +513,10 @@ Listing 3.14 shows how this works end-to-end.</p>
 <p>Now we can reuse our prompts by simply loading the JSON prompt template file and
 calling the <code>completion()</code> function with the right parameters to be replaced.</p>
 
-<p>To keep things simple, we used <code>text-davinci-003</code>. Since this is more expensive
-than <code>gpt-3.5-turbo</code>, let’s also provide an alternative that templates chat
-completions. Listing 3.15 shows how our lawyer large language model template
-would look like for chat completions. We’ll store this as <code>lawyer_chat.json</code>.</p>
+<p>To keep things simple, we used <code>gpt-3.5-turbo-instruct</code>. Let’s also provide an
+alternative that templates chat completions. Listing 3.15 shows how our lawyer
+large language model template would look like for chat completions. We’ll store
+this as <code>lawyer_chat.json</code>.</p>
 <div class="highlight"><pre><span></span><span class="p">{</span>
 <span class="w">    </span><span class="nt">&quot;temperature&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.2</span><span class="p">,</span>
 <span class="w">    </span><span class="nt">&quot;max_tokens&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span>

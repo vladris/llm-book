@@ -448,7 +448,7 @@ code in listing 1.5 in <code>hello_world.py</code> and run it.</p>
 
 <span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">)</span>
 <span class="n">response</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+    <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo-instruct&#39;</span><span class="p">,</span>
     <span class="n">prompt</span><span class="o">=</span><span class="s1">&#39;Say &quot;Hello world&quot; in Python&#39;</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
@@ -458,8 +458,9 @@ code in listing 1.5 in <code>hello_world.py</code> and run it.</p>
 
 <p>We are retrieving the OpenAI API key from the environment using <code>os.getenv()</code>,
 then calling the <code>openai.Completion.create()</code> API with the model
-<code>text-davinci-003</code> and the prompt <code>Say &quot;Hello world&quot; in Python</code>. We’ll discuss
-available models and how to call OpenAI APIs at length in the next chapter.</p>
+<code>gpt-3.5-turbo-instruct</code> and the prompt <code>Say &quot;Hello world&quot; in Python</code>. We’ll
+discuss available models and how to call OpenAI APIs at length in the next
+chapter.</p>
 
 <p>The key takeaway for now is that the code prompts the model to respond with the
 Python code that prints “Hello world”. We get a <code>response</code> object back, and we

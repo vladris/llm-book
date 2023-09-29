@@ -70,7 +70,7 @@ module throughout the book.</p>
         <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_params</span><span class="p">(</span><span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo-instruct&#39;</span><span class="p">,</span>
             <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
 
 
@@ -132,7 +132,7 @@ exception. The provided utilities are:</p>
 <li>The <code>Template</code> class, a completion template. This can be created from an
 object or loaded from a file conforming to the OpenAI API schema. The
 <code>completion()</code> function instantiates the template with actual parameters and
-sends a request to <code>text-davinci-003</code>.</li>
+sends a request to <code>gpt-3.5-turbo-instruct</code>.</li>
 <li>The <code>ChatTemplate</code> class is similar to <code>Template</code>, but represents a chat
 completion template and sends the request to <code>gpt-3.5-turbo</code>.</li>
 <li>The <code>count_tokens()</code> function uses the <code>tiktoken</code> library and provides a token
