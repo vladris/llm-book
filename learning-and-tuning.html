@@ -28,10 +28,6 @@
 
 <p><img src="images/04/cover.png" alt="Learning and Tuning"></p>
 
-<p>⚠️ <em>This chapter was written before OpenAI announced fine-tuning for
-<code>gpt-3.5-turbo</code>. The section dealing with fine-tuning is no longer accurate and
-will be rewritten to account for this update.</em></p>
-
 <p>In this chapter:</p>
 
 <ul>
@@ -73,10 +69,11 @@ is not enough. In the second part of this chapter, we’ll introduce
 <em>fine-tuning</em>. This is a more involved process where we can provide any number
 of questions and answers to a model which will help tune its responses.</p>
 
-<p>Currently, OpenAI only supports fine-tuning for their <code>ada</code>, <code>babbage</code>, <code>curie</code>,
-and <code>davinci</code> models, so we’ll look into fine-tuning <code>davinci</code> for a specific
-task. We will implement a Q&amp;A using this fine-tuned model, then talk about some
-of the tradeoffs when using fine-tuning.</p>
+<p>OpenAI used to only support fine-tuning for their <code>ada</code>, <code>babbage</code>, <code>curie</code>, and
+<code>davinci</code> models, with <code>davinci</code> being the most powerful of the bunch. More
+recently, OpenAI started providing a fine-tunable version of GPT-3.5 Turbo –
+<code>gpt-3.5-turbo-instruct</code>. We will implement a Q&amp;A fine-tuning a model, then
+talk about some of the tradeoffs when using fine-tuning.</p>
 
 <p>Let’s see what zero-shot learning is about.</p>
 
@@ -105,8 +102,7 @@ of language.</p>
 <code>max_tokens</code> etc. If we don’t mention them, the default values will be used.</p>
 
 <p>We’re relying on the prompt templating we set up in Chapter 3. We’ll be using
-<code>gpt-3.5-turbo</code>, the chat completion model, since it is cheaper than
-<code>text-davinci-003</code> and just as good for this task. This template contains a
+<code>gpt-3.5-turbo</code>, the chat completion model. This template contains a
 <code>system</code> message, telling the model to act as a translator, and a prompt to
 translate text to French. The actual text is replaced at runtime.</p>
 
@@ -554,10 +550,11 @@ pre-trained model and including relevant information in the prompt, we are
 modifying the model itself based on our data.</p>
 
 <p>We won’t be using prompts for this, rather a dedicated API. In fact, not all
-models can be fine-tuned. We’ve been using <code>gpt-3.5-turbo</code> and
-<code>text-davinci-003</code> in our examples so far, but neither of them can be
-fine-tuned. At the time of writing, the models which support fine-tuning are the
-base models <code>ada</code>, <code>babbage</code>, <code>curie</code>, and <code>davinci</code>.</p>
+models can be fine-tuned. We’ve been using <code>gpt-3.5-turbo</code> in a lot of our
+examples. <code>gpt-3.5-turbo</code> can’t be fine-tuned. It used to be that only the older
+base models <code>ada</code>, <code>babbage</code>, <code>curie</code>, and <code>davinci</code> supported fine-tuning. More
+recently, OpenAI launched <code>gpt-3.5-turbo-instruct</code> with fine-tuning
+capabilities.</p>
 
 <p>Pricing for this at the time of writing is shown in table 4.1. As always, you can find the up-to-date pricing at <a href="https://openai.com/pricing">https://openai.com/pricing</a>.</p>
 
@@ -565,31 +562,30 @@ base models <code>ada</code>, <code>babbage</code>, <code>curie</code>, and <cod
 <thead>
 <tr>
 <th>MODEL</th>
-<th>TRAINING PRICE PER 1K TOKENS</th>
-<th>USAGE PRICING PER 1K TOKENS</th>
+<th>TRAINING PRICE</th>
+<th>INPUT USAGE</th>
+<th>OUTPUT USAGE</th>
 </tr>
 </thead>
 
 <tbody>
 <tr>
-<td>Ada</td>
-<td>$0.0004</td>
-<td>$0.0016</td>
-</tr>
-<tr>
 <td>Babbage</td>
-<td>$0.0006</td>
-<td>$0.0024</td>
-</tr>
-<tr>
-<td>Curie</td>
-<td>$0.0030</td>
-<td>$0.0120</td>
+<td>$0.0004 / 1K tokens</td>
+<td>$0.0016 / 1K tokens</td>
+<td>$0.0016 / 1K tokens</td>
 </tr>
 <tr>
 <td>Davinci</td>
-<td>$0.0300</td>
-<td>$0.1200</td>
+<td>$0.0060 / 1K tokens</td>
+<td>$0.0120 / 1K tokens</td>
+<td>$0.0120 / 1K tokens</td>
+</tr>
+<tr>
+<td>GPT-3.5 Turbo</td>
+<td>$0.0080 / 1K tokens</td>
+<td>$0.0120 / 1K tokens</td>
+<td>$0.0160 / 1K tokens</td>
 </tr>
 </tbody>
 </table>
@@ -601,16 +597,14 @@ base models <code>ada</code>, <code>babbage</code>, <code>curie</code>, and <cod
 <ul>
 <li>Pricing is done per 1000 tokens, with different prices for the training
 (fine-tuning) part, and subsequent usage of the fine-tuned model.</li>
-<li>Pricing increases by an order of magnitude from <code>babbage</code> to <code>curie</code>, and
-again from <code>curie</code> to <code>davinci</code>.</li>
+<li>Pricing increases by an order of magnitude from <code>babbage</code> to <code>davinci</code>. The
+best performing model, <code>gpt-3.5-turbo-instruct</code>, is the most expensive.</li>
 </ul>
 
 <p>Keep this in mind when using these for a production scenario and find the sweet
 spot between cost and model performance. In our example we’ll be using
 <code>davinci</code>. In general, the larger the dataset we train with, the better results
-we get. Since we’re using a small dataset, we’re using a better model.
-Fine-tuning this costs $0.37. If you want, you can use a cheaper model when
-running through the sample (<code>babbage</code> costs $0.01 to fine-tune on this dataset).</p>
+we get.</p>
 
 <p>Let’s walk through the steps of fine-tuning a model to answer questions about a
 fictional race (something the model was definitely not trained on). Let’s say we
@@ -980,9 +974,9 @@ Listing 4.24 shows the code for this.</p>
 
 <p><em>Listing 4.24: Q&amp;A using the fine-tuned model.</em></p>
 
-<p>We’re not using <code>llm_utils</code> in this case since our <code>Template</code> class is hardcoded
-to use <code>text-davinci-003</code> – for good reason, since this is the only code sample
-where we’re using a different model.</p>
+<p>We’re not using <code>llm_utils</code> in this case since our <code>Template</code> class uses a
+hardcoded model – for good reason, since this is the only code sample where
+we’re using a different model.</p>
 
 <p>We have a template providing an example question and answer (one-shot learning)
 for formatting. Note that we are using the fine-tuned model
@@ -1045,12 +1039,13 @@ differently fine-tuned model, the models will diverge in the responses they
 provide as they no longer have the same parameters. This might or might not be
 an issue depending on your specific use-case, but something to keep in mind.</p>
 
-<p>More importantly, at the time of writing, OpenAI only support fine-tuning of
-GPT-3 family models: <code>ada</code>, <code>babbage</code>, <code>curie</code>, and <code>davinci</code>. These models are
-in general “dumber” than the 3.5 family we’re been using throughout the rest of
-the book (<code>text-davinci-003</code> and <code>gpt-3.5-turbo</code>) and the more recently launched
-GPT-4. That means in general we’ll be getting worse responses than we would from
-newer models. Unfortunately, the newer models do not support fine-tuning.</p>
+<p>More importantly, at the time of writing, OpenAI just added support for
+fine-tuning GPT-3.5 Turbo models. Previously, only GPT-3 models were
+fine-tunable, even though there was a new generation of models available. Due to
+popular demand, <code>gpt-3.5-turbo-instruct</code> is a model that supports fine-tuning.
+That said, the best performing model now is GPT-4. In general, we’ll be getting
+worse responses from older models than we would from newer models.
+Unfortunately, the newest models do not support fine-tuning.</p>
 
 <p>This seems like a pretty bad tradeoff. We’d like to use a large language model
 with better performance. But remember, we went through the trouble of
@@ -1079,8 +1074,6 @@ the dataset provided.</li>
 <li>The larger the dataset, the better responses we will get.</li>
 <li>Provide adversarial examples, otherwise the models will hallucinate responses
 even when lacking data.</li>
-<li>Only GPT-3 family models can be fine-tuned, which is a drawback as newer
-generation models are better.</li>
 </ul>
 
 </article>
