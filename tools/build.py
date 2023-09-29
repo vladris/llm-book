@@ -28,6 +28,8 @@ chapter_titles = {
     '08': 'Safety and Security',
     '09': 'Frameworks',
     '10': 'Closing Thoughts',
+    'a': 'LLM Utilities',
+    'b': 'Pod Racing Dataset',
     'roadmap': 'Roadmap',
 }
 
@@ -46,11 +48,13 @@ chapter_headings = {
     '08': 'Chapter 8: %s',
     '09': 'Chapter 9: %s',
     '10': 'Chapter 10: %s',
+    'a': 'Appendix A: %s',
+    'b': 'Appendix B: %s',
     'roadmap': '%s ~ LLMs at Work',
 }
 
 # Chapter order
-chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', 'roadmap']
+chapters = ['index', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', 'a', 'b', 'roadmap']
 
 
 # Get chapter outpath

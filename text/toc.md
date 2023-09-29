@@ -66,7 +66,8 @@
   * [GPT-4](./closing-thoughts.html#gpt-4)
   * [Future direction](./closing-thoughts.html#future-direction)
   * [Summary](./closing-thoughts.html#summary)
-* Appendix A: LLM Utilities
+* [Appendix A: LLM Utilities](./llm-utilities.html)
+* [Appendix B: Pod Racing Dataset](./pod-racing-dataset.html)
 
 ---
 
