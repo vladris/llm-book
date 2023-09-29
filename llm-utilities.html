@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>LLM Utilities ~ LLMs at Work</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha512-NhSC1YmyruXifcj/KFRWoC561YpHpc5Jtzgvbuzx5VozKpWvQ+4nXhPdFgmx8xqexRcpAglTj9sIBWINXa8x5w==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="./static/style.css" type="text/css">
+<link rel="stylesheet" href="./static/pygments.css" type="text/css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<!-- <link rel="shortcut icon" href="./static/icon.ico" /> -->
+</head>
+<body>
+<header>
+  <div class="title"><span>Appendix A: LLM Utilities</span></div>
+  <input type="checkbox" id="toggle">
+  <label class="hamburger" for="toggle"><span></span><span></span><span></span></label>
+  <ul class="menu">
+    <li><a href="./index.html">Front Cover</a></li>
+    <li><a href="./table-of-contents.html">Table of Contents</a></li>
+    <li><a href="./roadmap.html">🗺️ Roadmap</a></li>
+    <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
+    <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
+  </ul>
+</header>
+<article>
+<h1>Appendix A: LLM Utilities</h1>
+
+<p>Throughout the book, we’ve been relying on a few helper functions imported from
+llm_utils. This is a small module available as part of the code supporting this
+book. You can find it on GitHub, at <a href="https://github.com/vladris/llm-book">https://github.com/vladris/llm-book</a>, under
+<code>/code/llm_utils</code> folder. In fact, we looked at all the components of this
+module throughout the book.</p>
+
+<p>For completeness, here is the full code of <code>llm_utils.py</code>:</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">openai</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">tiktoken</span>
+
+<span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;OPENAI_API_KEY&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;OPENAI_API_KEY not set&#39;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">insert_params</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;{{(.*?)}}&quot;</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">matches</span><span class="p">:</span>
+        <span class="n">replacement</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">replacement</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">string</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;{{&quot;</span> <span class="o">+</span> <span class="n">match</span> <span class="o">+</span> <span class="s2">&quot;}}&quot;</span><span class="p">,</span> <span class="n">replacement</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">string</span>
+
+
+<span class="k">class</span> <span class="nc">Template</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span> <span class="o">=</span> <span class="n">template</span>
+
+    <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span><span class="n">template_file</span><span class="p">):</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">template_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">Template</span><span class="p">(</span><span class="n">template</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+        <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_params</span><span class="p">(</span><span class="n">instance</span><span class="p">[</span><span class="s1">&#39;prompt&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-davinci-003&#39;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">ChatTemplate</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">template</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">template</span> <span class="o">=</span> <span class="n">template</span>
+
+    <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span><span class="n">template_file</span><span class="p">):</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">template_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">template</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ChatTemplate</span><span class="p">(</span><span class="n">template</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parameters</span><span class="p">):</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">template</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">instance</span><span class="p">[</span><span class="s1">&#39;messages&#39;</span><span class="p">]:</span>
+            <span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">insert_params</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;content&#39;</span><span class="p">],</span> <span class="o">**</span><span class="n">parameters</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">ChatCompletion</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="s1">&#39;gpt-3.5-turbo&#39;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">instance</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">count_tokens</span><span class="p">(</span><span class="n">messages</span><span class="p">):</span>
+    <span class="c1"># Note this encoding might change in future versions of gpt-3.5-turbo</span>
+    <span class="n">encoding</span> <span class="o">=</span> <span class="n">tiktoken</span><span class="o">.</span><span class="n">get_encoding</span><span class="p">(</span><span class="s1">&#39;cl100k_base&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Every message follows &lt;|start|&gt;{role/name}\n{content}&lt;|end|&gt;\n</span>
+    <span class="n">tokens_per_message</span> <span class="o">=</span> <span class="mi">4</span>
+    <span class="c1"># If there&#39;s a name, the role is omitted</span>
+    <span class="n">tokens_per_name</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+    <span class="n">num_tokens</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
+        <span class="n">num_tokens</span> <span class="o">+=</span> <span class="n">tokens_per_message</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">num_tokens</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">encoding</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span>
+                <span class="n">num_tokens</span> <span class="o">+=</span> <span class="n">tokens_per_name</span>
+    <span class="c1"># Every reply is primed with &lt;|start|&gt;assistant&lt;|message|&gt;</span>
+    <span class="n">num_tokens</span> <span class="o">+=</span> <span class="mi">3</span>
+    <span class="k">return</span> <span class="n">num_tokens</span>
+
+
+<span class="k">def</span> <span class="nf">get_embedding</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">openai</span><span class="o">.</span><span class="n">Embedding</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)],</span>
+        <span class="n">model</span><span class="o">=</span><span class="s1">&#39;text-embedding-ada-002&#39;</span><span class="p">)[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;embedding&#39;</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">cosine_distance</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">1</span> <span class="o">-</span> <span class="nb">sum</span><span class="p">([</span><span class="n">a_i</span> <span class="o">*</span> <span class="n">b_i</span> <span class="k">for</span> <span class="n">a_i</span><span class="p">,</span> <span class="n">b_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)])</span> <span class="o">/</span> <span class="p">(</span><span class="nb">sum</span><span class="p">([</span><span class="n">a_i</span> <span class="o">**</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">a_i</span> <span class="ow">in</span> <span class="n">a</span><span class="p">])</span> <span class="o">**</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="nb">sum</span><span class="p">([</span><span class="n">b_i</span> <span class="o">**</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">b_i</span> <span class="ow">in</span> <span class="n">b</span><span class="p">])</span> <span class="o">**</span> <span class="mf">0.5</span><span class="p">)</span>
+</pre></div>
+
+<p>The module sets the <code>OPENAI_API_KEY</code> or, in case one is not present, raises an
+exception. The provided utilities are:</p>
+
+<ul>
+<li>The <code>Template</code> class, a completion template. This can be created from an
+object or loaded from a file conforming to the OpenAI API schema. The
+<code>completion()</code> function instantiates the template with actual parameters and
+sends a request to <code>text-davinci-003</code>.</li>
+<li>The <code>ChatTemplate</code> class is similar to <code>Template</code>, but represents a chat
+completion template and sends the request to <code>gpt-3.5-turbo</code>.</li>
+<li>The <code>count_tokens()</code> function uses the <code>tiktoken</code> library and provides a token
+count for a list of messages in a chat completion.</li>
+<li>The <code>get_embedding()</code> function just wraps a call to create an embedding given
+some text, using <code>text-embedding-ada-002</code> model.</li>
+<li>The <code>cosine_distance()</code> function is an implementation of the formula to
+compute cosine distance.</li>
+</ul>
+
+<p>As mentioned earlier, we already each of these when we discussed the
+corresponding topics. The module just brings them together and makes them
+available to other code as needed.</p>
+
+</article>
+<nav>
+<p>
+
+<span>Previous: <a href="closing-thoughts.html">Closing Thoughts</a>. 
+
+
+<span>Next: <a href="pod-racing-dataset.html">Pod Racing Dataset</a>.
+
+</p>
+</nav>
+<footer><span>By <a href="https://vladris.com/">Vlad Rișcuția</a>&nbsp;|&nbsp;<a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a>&nbsp;|&nbsp;<a href="https://tinyletter.com/vladris">✉️ Subscribe</a></span></footer>
+</body>
+</html>
