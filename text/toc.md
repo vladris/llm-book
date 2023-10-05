@@ -2,7 +2,7 @@
 
 * [Front Cover](./index.html)
 * [Table of Contents](./table-of-contents.html)
-* Preface
+* [Preface](./preface.html)
 * [Chapter 1: A New Paradigm](./a-new-paradigm.html)
   * [Who this book is for](./a-new-paradigm.html#who-this-book-is-for)
   * [Taking the world by storm](./a-new-paradigm.html#taking-the-world-by-storm)
@@ -34,7 +34,7 @@
   * [Key-value memory](./memory-and-embeddings.html#key-value-memory)
   * [Embeddings](./memory-and-embeddings.html#embeddings)
   * [Vector databases](./memory-and-embeddings.html#vector-databases)
-  * [A novel approach](./memory-and-embeddings.html#a-novel-approach)
+  * [Simulating human memory](./memory-and-embeddings.html#simulating-human-memory)
   * [Summary](./memory-and-embeddings.html#summary)
 * [Chapter 6: Interacting with External Systems](./interacting-with-external-systems.html)
   * [A function calling mechanism](./interacting-with-external-systems.html#a-function-calling-mechanism)
@@ -68,12 +68,3 @@
   * [Summary](./closing-thoughts.html#summary)
 * [Appendix A: LLM Utilities](./llm-utilities.html)
 * [Appendix B: Pod Racing Dataset](./pod-racing-dataset.html)
-
----
-
-## Roadmap
-
-* [Roadmap](./roadmap.html)
-  * [First draft](./roadmap.html#first-draft)
-  * [Second pass](./roadmap.html#second-pass)
-  * [Production](./roadmap.html#production)
