@@ -18,7 +18,6 @@
   <ul class="menu">
     <li><a href="./index.html">Front Cover</a></li>
     <li><a href="./table-of-contents.html">Table of Contents</a></li>
-    <li><a href="./roadmap.html">🗺️ Roadmap</a></li>
     <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
     <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
   </ul>
@@ -294,7 +293,7 @@ dataset can be arbitrarily large.</p>
 <div class="highlight"><pre><span></span>Travelling at Night
 ---
 The annotated dream-journals of Christopher Illopoly, sometimes called &#39;the only
-readable occultist&#39;: literate, entertaining, bewildering. 
+readable occultist&#39;: literate, entertaining, bewildering.
 &#39;The Wood lies outside the walls of the Mansus. As any student of Histories
 knows, the Mansus has no walls.&#39;Illopoly describes how he came to make repeated
 visits to a dream-Wood via what he calls silver dreams. &#39;Trying to think your
@@ -442,7 +441,9 @@ large language model.</p>
 been trained on, we can greatly increase their utility by providing external
 memory. This is very much analogous with how a computer system works – the large
 language model is like a CPU, and the memory implementations we’re covering in
-this chapter are like RAM.</p>
+this chapter are like RAM. The CPU performs operations but is very limited in
+terms of how much data it can store itself. A complete computer system includes
+memory. Data is loaded from the memory as needed for the CPU to operate on.</p>
 
 <p>Key-value memory works for some scenarios, but a big limitation with this
 approach is figuring out which keys are relevant to the user ask. In our book
@@ -626,7 +627,23 @@ character but doesn’t know which book the character shows up in.</p>
 or some other indexing schema, we compute the embedding of each chunk of data we
 have. When the user provides some input, we compute the embedding of the input.
 We then use the cosine distance to see which of our pieces of data is close to
-what the user is asking and pull that data into the prompt.</p>
+what the user is asking and pull that data into the prompt. Figure 5.6 shows
+how this works.</p>
+
+<p><img src="images/05/fig6.png" alt="Figure 5.6"></p>
+
+<p><em>Figure 5.6: Memory retrieval based on embeddings.</em></p>
+
+<p>We’re again using a 2-dimensional vector space for illustration purposes. In
+reality, our embeddings end up having many more dimensions.</p>
+
+<ol>
+<li>We start by computing the embedding for each piece of data in our memory. We
+only have to do this once.</li>
+<li>When the user provides some input, we compute the embedding of that.</li>
+<li>We determine which data embedding is closest to the user input embedding.
+This tells us which piece of data we want to add to our prompt.</li>
+</ol>
 
 <p>Let’s redo our Pod Racing example from chapter 4. Instead of fine-tuning a model
 to implement Q&amp;A, we’ll use a memory based on embeddings.</p>
@@ -1003,7 +1020,7 @@ expect many improvements over the upcoming period. For example, let’s look at
 the memory implementation used in a paper simulating several intelligent agents
 interacting with each other in a simulated world.</p>
 
-<h2 id="a-novel-approach">A novel approach</h2>
+<h2 id="simulating-human-memory">Simulating human memory</h2>
 
 <p>An interesting approach is described in the paper <em>Generative Agents:
 Interactive Simulacra of Human Behavior</em><sup id="fnref7"><a href="#fn7" rel="footnote">7</a></sup>. The paper describes a simulation,
@@ -1014,9 +1031,9 @@ they work, interact, form opinions and so on. I do recommend reading the paper
 
 <p>Related to this chapter, the paper describes the agent architecture, including
 memory. For this scenario, the memory is implemented as a stream of memory
-objects. These are <em>observations</em> captured by an agent and stored as a creation
-timestamp, last access timestamp, and the observation as a natural language
-description produced by the large language model.</p>
+objects. Memory objects are <em>observations</em> captured by an agent and stored as a
+creation timestamp, last access timestamp, and the observation as a natural
+language description produced by the large language model.</p>
 
 <p>Retrieving data from the memory stream is done by identifying the most relevant
 observations based on the agent’s current situation. The three main components

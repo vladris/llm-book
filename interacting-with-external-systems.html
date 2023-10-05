@@ -18,7 +18,6 @@
   <ul class="menu">
     <li><a href="./index.html">Front Cover</a></li>
     <li><a href="./table-of-contents.html">Table of Contents</a></li>
-    <li><a href="./roadmap.html">🗺️ Roadmap</a></li>
     <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
     <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
   </ul>
@@ -131,7 +130,9 @@ how they get called. Their output is prefixed with <code>*</code>.</p>
 model. First, we’ll implement a glue function that takes a <code>function_call</code>
 argument which we expect to contain a <code>name</code> (the name of the function to call)
 and <code>arguments</code> (string representation of the JSON parameters to pass to the
-function). Listing 6.2 shows the implementation.</p>
+function). This <code>function_call</code> object is what the large language model will
+output when it will ask us to call a function on its behalf. Listing 6.2 shows
+the implementation.</p>
 <div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
 
 
@@ -209,7 +210,7 @@ We now have a way to describe what functions a model has available to call, and
 the model has a way to clearly tell us what function it would like to have
 called. We’ll start with how we describe functions to the large language model.</p>
 
-<h3>Describing functions</h3>
+<h3>Describing functions to the model</h3>
 
 <p>OpenAI now allows us to specify a set of functions available to it using the
 <code>functions</code> parameter. Listing 6.3 shows the template for our personal assistant
@@ -314,7 +315,7 @@ system. This time around though, we’ll be able to ask it to schedule meetings
 using natural language and it will do so by calling the APIs we provided. But
 first, let’s go over how functions work with the OpenAI API.</p>
 
-<h3>Calling functions</h3>
+<h3>Handling function call requests</h3>
 
 <p>In chapter 2, when we discussed the OpenAI API, parameters and responses, we
 deliberately skipped functions to keep things simple. We’ll revisit this now.</p>
@@ -830,7 +831,7 @@ to buy cheese, my prompt shouldn’t also teach it how to schedule meetings and
 email people.</p>
 
 <p>Of course, we know from chapter 5 what to do if we’re worried about token
-limits: use memory. We will store all our available functions in a vector
+limits: use memory. We can store all our available functions in a vector
 database, indexed by description embedding (where description is the
 <code>description</code> property in our function JSON).</p>
 

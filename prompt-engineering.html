@@ -18,7 +18,6 @@
   <ul class="menu">
     <li><a href="./index.html">Front Cover</a></li>
     <li><a href="./table-of-contents.html">Table of Contents</a></li>
-    <li><a href="./roadmap.html">🗺️ Roadmap</a></li>
     <li><a href="https://github.com/vladris/llm-book/issues/new">📣 Feedback</a></li>
     <li><a href="https://tinyletter.com/vladris">✉️ Subscribe for updates</a></li>
   </ul>
@@ -203,8 +202,8 @@ relevance of the generated text.</p>
 in the prompt to guide the model toward the desired output, while avoiding
 ambiguity or confusion.</p>
 
-<p>We are still discovering the best, most effective prompt recipes, but a starting
-point for a good prompt includes telling the model:</p>
+<p>The industry is still discovering the best, most effective prompt recipes, but a
+starting point for a good prompt includes telling the model:</p>
 
 <ul>
 <li><strong>Who to act like</strong> - This can be “you are an AI assistant”, or “respond as a
@@ -215,11 +214,11 @@ information that helps clarify the ask or provides data that can be used when
 generating the answer.</li>
 <li><strong>Who the audience is</strong> – You can tweak the response by being specific about
 the audience (e.g., “explain like I’m 5 years old”).</li>
-<li><strong>How the output should look like</strong> – You can be as descriptive as needed.
+<li><strong>What the output should look like</strong> – You can be as descriptive as needed.
 *“Short summary”, “500 word article”, or “5 bullet points no more than 7 words
 *each”.</li>
 <li><strong>How to go about generating the output</strong> – Additional instructions for the
-*large language model, like “think step by step”.</li>
+*large language model, like “think step by step” (more on this later).</li>
 <li><strong>Examples</strong> – It helps to give examples; we’ll talk more about this in the
 next chapter. Examples are good way of showing the large language model what
 you expect.</li>
@@ -230,7 +229,8 @@ you expect.</li>
 <p>For example, if we’re talking about integration within other systems, we care
 about the shape of the output. Instead of asking <code>summarize this business plan</code>,
 we are specific about how we want the format (<code>5 bullet points, no more than 7
-words each</code>).</p>
+words each</code>)  – maybe we want the response to fit into some specific UI
+elements, or be processed by another system.</p>
 
 <p>Of course, for complex scenarios, you won’t get the prompt right in one go.
 You’ll have to refine it several times. This iterative process is called <em>prompt
@@ -272,6 +272,10 @@ as without it the large language model would imagine a whole interview exchange
 and respond with it in one go.</p>
 </blockquote>
 
+<p>Superprompts uncover emergent behavior. These are discovered as people
+experiment with prompting. Don’t feel too bad if you don’t come up with a
+superprompt on your own.</p>
+
 <p>A somewhat magical phrase that seems to help in many prompts is “think step by
 step” or variations of it, like “think about this logically”. This is called
 <em>chain-of-thought</em>, explicitly asking the large language model to list the steps
@@ -308,8 +312,8 @@ Answer: There are 3 red roses in the bouquet.
 
 <p>Turns out the model could generate the correct response all along, but it needed
 additional guidance. In some cases, simply adding “think step by step” or
-similar phrases is enough. In other cases, including an example of how this
-step-by-step reasoning looks like in the prompt helps. See Listing 3.11 for an
+similar phrases is enough. Another technique is to include an example of how
+this step-by-step reasoning looks like in the prompt. See Listing 3.11 for an
 example of this.</p>
 <div class="highlight"><pre><span></span>Q: In a bouquet of 24 flowers, half are roses. A third of the roses are red. How
 many red roses are in the bouquet?
@@ -532,7 +536,9 @@ this as <code>lawyer_chat.json</code>.</p>
 <p>The JSON looks a lot like the one in listing 3.11, except instead of a <code>prompt</code>
 string property we have a <code>messages</code> array property containing a list of <code>role</code>
 and <code>content</code> pairs. This is very much in line with the differences between the
-completion API and the chat completion API.</p>
+completion API and the chat completion API. Remember we covered this in chapter
+2, including the different roles in a chat completion message list (<code>system</code>,
+<code>user</code>, <code>assistant</code>).</p>
 
 <p>Let’s also implement the corresponding <code>ChatTemplate</code> class (listing 3.16).</p>
 <div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">copy</span>
