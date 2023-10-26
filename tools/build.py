@@ -17,8 +17,8 @@ shutil.rmtree('site/images', ignore_errors=True)
 # Chapter title mappings
 chapter_titles = {
     'index': 'Front Cover',
-    'toc': 'Table of Contents',
     'preface': 'Preface',
+    'toc': 'Table of Contents',
     '01': 'A New Paradigm',
     '02': 'Large Language Models',
     '03': 'Prompt Engineering',
@@ -36,8 +36,8 @@ chapter_titles = {
 # Chapter heading mappings
 chapter_headings = {
     'index': '%s ~ LLMs at Work',
-    'toc': '%s ~ LLMs at Work',
     'preface': '%s ~ LLMs at Work',
+    'toc': '%s ~ LLMs at Work',
     '01': 'Chapter 1: %s',
     '02': 'Chapter 2: %s',
     '03': 'Chapter 3: %s',
@@ -53,7 +53,7 @@ chapter_headings = {
 }
 
 # Chapter order
-chapters = ['index', 'toc', 'preface', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', 'a', 'b']
+chapters = ['index', 'preface', 'toc', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', 'a', 'b']
 
 
 # Get chapter outpath

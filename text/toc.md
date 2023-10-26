@@ -1,8 +1,8 @@
 # Table of Contents
 
 * [Front Cover](./index.html)
-* [Table of Contents](./table-of-contents.html)
 * [Preface](./preface.html)
+* [Table of Contents](./table-of-contents.html)
 * [Chapter 1: A New Paradigm](./a-new-paradigm.html)
   * [Who this book is for](./a-new-paradigm.html#who-this-book-is-for)
   * [Taking the world by storm](./a-new-paradigm.html#taking-the-world-by-storm)

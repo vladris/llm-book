@@ -2,10 +2,6 @@
 
 ## Enhancing Software Systems with Language Models
 
-![Book cover](images/title/cover.png)
+Now on Kindle: <https://a.co/d/1EPbBji>
 
-> *Giant language minds  
-> Transforming words and culture  
-> Limitless power*  
-
-Haiku by `gpt-3.5-turbo`
+[![Book](images/title/llm.jpg)](https://a.co/d/1EPbBji)
