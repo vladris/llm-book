@@ -2,6 +2,8 @@
 
 Repository for my in-development book, *Large Language Models at Work: Enhancing Software Systems with Language Models*.
 
+Now on Kindle: <https://a.co/d/4MiwZvX>.
+
 Online at <https://vladris.com/llm-book>.
 
 * `code` contains all the code samples.
