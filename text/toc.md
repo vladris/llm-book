@@ -61,7 +61,7 @@
   * [Other libraries](./frameworks.html#other-libraries)
   * [Summary](./frameworks.html#summary)
 * [Chapter 10: Closing Thoughts](./closing-thoughts.html)
-  * [White writing this book](./closing-thoughts.html#while-writing-this-book)
+  * [While writing this book](./closing-thoughts.html#while-writing-this-book)
   * [Multimodal models](./closing-thoughts.html#multimodal-models)
   * [GPT-4](./closing-thoughts.html#gpt-4)
   * [Future direction](./closing-thoughts.html#future-direction)
