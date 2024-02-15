@@ -10,9 +10,9 @@ while True:
 
     response = selection.completion({'ask': ask})
     print(response.choices[0].message.content)
-    selection = json.loads(response.choices[0].message.content)
+    selected = json.loads(response.choices[0].message.content)
 
-    response = ChatTemplate.from_file(selection['as'] + '_chat.json').completion({
-        'action': selection['action'],
-        'document': selection['document']})
+    response = ChatTemplate.from_file(selected['as'] + '_chat.json').completion({
+        'action': selected['action'],
+        'document': selected['document']})
     print(response.choices[0].message.content)
