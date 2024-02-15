@@ -766,11 +766,11 @@ invoke the identified prompt. Listing 3.23 shows the end-to-end.</p>
 
     <span class="n">response</span> <span class="o">=</span> <span class="n">selection</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span><span class="s1">&#39;ask&#39;</span><span class="p">:</span> <span class="n">ask</span><span class="p">})</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-    <span class="n">selection</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="n">selected</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
 
-    <span class="n">response</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">selection</span><span class="p">[</span><span class="s1">&#39;as&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_chat.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span>
-        <span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="n">selection</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">],</span>
-        <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="n">selection</span><span class="p">[</span><span class="s1">&#39;document&#39;</span><span class="p">]})</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">ChatTemplate</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">selected</span><span class="p">[</span><span class="s1">&#39;as&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_chat.json&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">completion</span><span class="p">({</span>
+        <span class="s1">&#39;action&#39;</span><span class="p">:</span> <span class="n">selected</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">],</span>
+        <span class="s1">&#39;document&#39;</span><span class="p">:</span> <span class="n">selected</span><span class="p">[</span><span class="s1">&#39;document&#39;</span><span class="p">]})</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
 </pre></div>
 
@@ -783,13 +783,13 @@ as requested, valid JSON with the properties we require, we use the
 <code>json.loads()</code> function to parse the JSON string into an object.</p>
 
 <p>We then load the prompt we’ll use to accomplish the user ask. We use
-<code>selection[&#39;as&#39;]</code> prepended to <code>&#39;_chat.json&#39;</code>, to load the appropriate template
+<code>selected[&#39;as&#39;]</code> prepended to <code>&#39;_chat.json&#39;</code>, to load the appropriate template
 prompt. For example, if our JSON object has <code>&quot;as&quot;: &quot;lawyer&quot;</code>, the string becomes
 <code>&#39;lawyer_chat.json&#39;</code>.</p>
 
 <p>We also pass in the two parameters, <code>action</code> and <code>document</code>, from the JSON
 object. This is done for clarity, as we could’ve used keyword arguments here and
-simply pass <code>**selection</code>.</p>
+simply pass <code>**selected</code>.</p>
 
 <p>We then print the response we get back. You can run this code and play with it,
 trying different asks. This implements the system we described in figure 2. This
