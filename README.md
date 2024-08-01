@@ -1,6 +1,6 @@
 # 📕 Large Language Models at Work
 
-Repository for my in-development book, *Large Language Models at Work: Enhancing Software Systems with Language Models*.
+Repository for *Large Language Models at Work: Enhancing Software Systems with Language Models*.
 
 Now on Kindle: <https://a.co/d/4MiwZvX>.
 
